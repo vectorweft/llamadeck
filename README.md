@@ -72,25 +72,6 @@ uv sync
 uv run llamadeck serve
 ```
 
-### Upgrading from an "LSC" install
-
-The project used to be called LSC, and that name is gone from everything the
-user touches. Nothing needs doing by hand:
-
-- **State** — `~/.config/lsc` is moved to `~/.config/llamadeck` on the first
-  start, database included, and a symlink is left at the old path so absolute
-  paths already saved inside a preset keep resolving. Both directories
-  existing means the new one is authoritative and the old one is left alone.
-- **UI preferences** — theme, language and zoom carry over on first load.
-- **Commands** — `llamadeck` and the short `lld` replace `lsc`. The import
-  package is `lld`.
-- **Desktop entry** — re-run `scripts/install-desktop.sh`; it writes
-  `llamadeck.desktop`. Remove the old one with
-  `rm ~/.local/share/applications/lsc.desktop ~/.local/share/icons/hicolor/scalable/apps/lsc.svg`.
-- **The OpenAI proxy still accepts `X-LSC-Holder` / `X-LSC-Lease`**, since
-  those are a wire contract other projects already send. `X-LlamaDeck-Holder`
-  and `X-LlamaDeck-Lease` are the names to use from here on.
-
 ## A look around
 
 **Fit-check answers "will this actually run?" before you hit start** — it parses the GGUF, adds up weights + KV cache + compute buffers, compares that against what the GPU has free *right now*, and suggests the fix (`--n-cpu-moe N`, KV quantization, smaller context) instead of letting the load OOM:
