@@ -9,9 +9,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .argv import mmproj_backend_env
 from .models import scan_roots
-from .rpc_server import needs_rpc_for, rpc_flag_value
 from .presets import PresetRegistry
+from .rpc_server import needs_rpc_for, rpc_flag_value
 from .settings import LlamaServerConfig, atomic_write_text
 
 # (cfg attr, INI key). Per-model SAMPLING is intentionally skipped — defaults
@@ -119,6 +120,11 @@ def router_env(
     win. The router preset's own value wins outright; otherwise the first
     preset by name takes the key, and the loser is named in the returned
     warnings for the caller to log.
+
+    A served vision preset also contributes its *derived* MTMD_BACKEND_DEVICE
+    (see argv.mmproj_backend_env): the encoder ignores the INI's `device =`
+    line exactly like it ignores -dev, and the router loads its models inside
+    its own process, so this is the only place that pin can land.
     """
     if presets is None:
         presets = PresetRegistry().list()
@@ -130,7 +136,11 @@ def router_env(
     for cfg in sorted(presets, key=lambda c: c.name):
         if not _serves(cfg, md):
             continue
-        for k, v in (getattr(cfg, "env", None) or {}).items():
+        contribution = {
+            **mmproj_backend_env(cfg),
+            **{str(k): str(v) for k, v in (getattr(cfg, "env", None) or {}).items()},
+        }
+        for k, v in contribution.items():
             k, v = str(k), str(v)
             if k in merged and merged[k] != v:
                 warnings.append(

@@ -17,7 +17,7 @@ from typing import AsyncIterator
 
 import psutil
 
-from .argv import from_argv, to_argv
+from .argv import from_argv, mmproj_backend_env, to_argv
 from .devices import probe_devices, unknown_device_ids
 from .flag_catalog import flags_missing_values, get_flag_catalog
 from .rpc_server import RpcServerError, get_rpc_manager, needs_rpc_for
@@ -365,6 +365,14 @@ class ProcessHandle:
             for w in warnings:
                 log.warning("[%s] %s", self.preset_name, w)
             overrides = merged
+        else:
+            # The mmproj (vision encoder) ignores -dev: llama.cpp pins it via
+            # MTMD_BACKEND_DEVICE or drops it on the first GPU backend (CUDA0
+            # on a CUDA+Vulkan build). Inject it so a single-device preset
+            # keeps every part of the model on that device. setdefault → the
+            # preset's own explicit env wins.
+            for k, v in mmproj_backend_env(self.cfg).items():
+                overrides.setdefault(k, v)
         if not overrides:
             return None
         return {**os.environ, **overrides}

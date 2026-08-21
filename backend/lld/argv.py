@@ -458,6 +458,36 @@ def command_env(text: str) -> dict[str, str]:
     return env
 
 
+# llama.cpp's multimodal projector ignores `--device`. tools/mtmd/clip.cpp
+# picks the encoder's GPU from the MTMD_BACKEND_DEVICE env var, defaulting to
+# the *first* GPU backend in ggml's registry — on a CUDA+Vulkan build that is
+# CUDA0. So a vision preset pinned to `Vulkan1` (the R9700) still drops its
+# vision encoder on the NVIDIA card, and the 5090 OOMs the moment it is busy.
+# There is no flag for this, only the env var — the same class of knob as
+# GGML_CUDA_DISABLE_GRAPHS, which is why it is injected at spawn rather than
+# rendered into argv.
+_MTMD_BACKEND_DEVICE = "MTMD_BACKEND_DEVICE"
+
+
+def mmproj_backend_env(cfg: LlamaServerConfig) -> dict[str, str]:
+    """The MTMD_BACKEND_DEVICE a preset's process needs, or {} when it doesn't.
+
+    Injected only when the preset loads a multimodal projector (`--mmproj`)
+    AND pins at least one real device. The encoder is a single model, so it
+    must live on exactly one device; the first entry of the pin is the one the
+    user named first. A preset that leaves `devices` empty keeps llama.cpp's
+    default ("let llama.cpp choose" stays untouched), and an explicit
+    MTMD_BACKEND_DEVICE in the preset's own `env` wins — callers merge this
+    mapping *under* the preset's env.
+    """
+    if not getattr(cfg, "mmproj_path", None):
+        return {}
+    devices = [d for d in (getattr(cfg, "devices", None) or []) if d]
+    if not devices or "none" in devices:
+        return {}
+    return {_MTMD_BACKEND_DEVICE: devices[0]}
+
+
 def _is_number(tok: str) -> bool:
     """`-1` is a value, not a flag — it belongs on its flag's line."""
     try:

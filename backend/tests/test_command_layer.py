@@ -607,6 +607,98 @@ def test_a_malformed_env_key_is_rejected_at_save():
             _reject_bad_env(_preset(env={bad: "1"}))
 
 
+# ── the mmproj ignores -dev: MTMD_BACKEND_DEVICE is injected at spawn ──────
+# llama.cpp's multimodal encoder (tools/mtmd) does not see `--device`: it picks
+# its GPU from the MTMD_BACKEND_DEVICE env var, defaulting to the first GPU
+# backend in ggml's registry (CUDA0 on a CUDA+Vulkan build). Without this a
+# vision preset pinned to Vulkan1 still drops the encoder on the NVIDIA card —
+# the exact "part of my R9700 model landed on the 5090" report this guards.
+
+def test_a_vision_preset_pinning_a_device_pins_the_mmproj_backend():
+    from lld.supervisor import ProcessHandle
+
+    vision = _preset(
+        name="qwen-r9700-vision",
+        model_path="/ml/models/Qwen3.8-27B-UD-Q6_K.gguf",
+        mmproj_path="/ml/models/mmproj-BF16.gguf",
+        devices=["Vulkan1"],
+    )
+    env = ProcessHandle("qwen-r9700-vision", vision, BIN)._spawn_env()
+    assert env["MTMD_BACKEND_DEVICE"] == "Vulkan1"
+    assert "PATH" in env          # inherited, not replaced
+
+
+def test_an_explicit_mtmd_backend_device_wins_over_the_derived_one():
+    from lld.supervisor import ProcessHandle
+
+    vision = _preset(
+        mmproj_path="/ml/models/mmproj-BF16.gguf",
+        devices=["Vulkan1"],
+        env={"MTMD_BACKEND_DEVICE": "CUDA0"},   # user really means CUDA0
+    )
+    env = ProcessHandle("qwen38-chat", vision, BIN)._spawn_env()
+    assert env["MTMD_BACKEND_DEVICE"] == "CUDA0"
+
+
+def test_no_mtmd_backend_device_without_mmproj_or_a_device_pin():
+    from lld.supervisor import ProcessHandle
+
+    # No projector → nothing to pin.
+    assert ProcessHandle("p", _preset(devices=["Vulkan1"]), BIN)._spawn_env() is None
+    # Projector but no pin → "let llama.cpp choose" stays untouched.
+    assert ProcessHandle(
+        "p", _preset(mmproj_path="/ml/models/mmproj-BF16.gguf"), BIN
+    )._spawn_env() is None
+    # Projector pinned to "none" → CPU-only intent is respected.
+    assert ProcessHandle(
+        "p",
+        _preset(mmproj_path="/ml/models/mmproj-BF16.gguf", devices=["none"]),
+        BIN,
+    )._spawn_env() is None
+
+
+def test_the_router_carries_the_derived_mmproj_backend_of_its_vision_models():
+    """The router loads models in its own process, so the encoder pin must
+    reach it through the router env, not the INI (`device =` is ignored by
+    the encoder there just like -dev is)."""
+    from lld.router_ini import router_env
+
+    vision = _preset(
+        name="qwen-r9700-vision",
+        model_path="/ml/models/Qwen3.8-27B-UD-Q6_K.gguf",
+        mmproj_path="/ml/models/mmproj-BF16.gguf",
+        devices=["Vulkan1"],
+    )
+    router = _preset(name="router-8085", mode="router", model_path=None,
+                     models_dir="/ml/models")
+
+    env, warnings = router_env("/ml/models", [vision, router],
+                               router_preset=router)
+    assert env["MTMD_BACKEND_DEVICE"] == "Vulkan1"
+    assert warnings == []
+
+
+def test_router_conflicting_mmproj_backends_are_reported_like_any_env():
+    """Two served vision presets pinning different GPUs cannot both win in one
+    process; first by name takes it and the loser is named, exactly like the
+    GGML_CUDA_DISABLE_GRAPHS conflict."""
+    from lld.router_ini import router_env
+
+    a = _preset(
+        name="a-vision", model_path="/ml/models/A.gguf",
+        mmproj_path="/ml/models/mmproj-A.gguf", devices=["Vulkan1"],
+    )
+    b = _preset(
+        name="b-vision", model_path="/ml/models/B.gguf",
+        mmproj_path="/ml/models/mmproj-B.gguf", devices=["CUDA0"],
+    )
+
+    env, warnings = router_env("/ml/models", [a, b])
+    assert env["MTMD_BACKEND_DEVICE"] == "Vulkan1"   # first by name
+    assert len(warnings) == 1
+    assert "a-vision" in warnings[0] and "b-vision" in warnings[0]
+
+
 # ── a flag that needs a value and was given none ──────────────────────
 # llama-server refuses the WHOLE command line for this and exits before it has
 # written anything a user would read as a reason. The preset just does not
