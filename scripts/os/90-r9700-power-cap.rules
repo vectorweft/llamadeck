@@ -1,0 +1,13 @@
+# Radeon AI PRO R9700 (Navi 48, 0000:03:00.0) — persistent tuning.
+#
+# power1_cap resets to 300 W on every boot and on driver reload; 220 W pinned
+# (user choice 2026-08-20 — see README.md for the measurement table).
+#
+# Pinned by PCI address, NOT by cardN/hwmonN — those indices move between boots.
+# Valid range on this card: 210000000 - 300000000 (microwatts).
+ACTION=="add|change", SUBSYSTEM=="hwmon", KERNELS=="0000:03:00.0", ATTR{name}=="amdgpu", ATTR{power1_cap}="220000000"
+
+# Keep the card out of D3hot runtime suspend. As a headless secondary GPU the
+# kernel can suspend it; amdgpu then loses fan control and the fan falls back to a
+# fixed RPM — the configuration behind the 109C-with-stationary-fan reports.
+ACTION=="add", SUBSYSTEM=="pci", KERNEL=="0000:03:00.0", ATTR{power/control}="on"

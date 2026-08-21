@@ -1,0 +1,1 @@
+function t(e,r){return e!=null&&e.model_path?(e.model_path.split("/").pop()??e.model_path).replace(/\.gguf$/i,""):e!=null&&e.hf_file?e.hf_file.replace(/\.gguf$/i,""):e!=null&&e.hf_repo?e.hf_repo:r}export{t as m};

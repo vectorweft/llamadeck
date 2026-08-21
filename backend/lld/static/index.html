@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950 text-slate-100">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LlamaDeck</title>
+    <script>
+      // Apply the saved theme and language before first paint to avoid a flash.
+      try {
+        // The app shipped as "LSC" and stored its UI preferences under
+        // lsc-*. Carry them over once, here, before anything reads them —
+        // otherwise the rename silently resets everyone's theme, language and
+        // zoom back to the defaults on the first launch after upgrading.
+        for (const key of ['theme', 'lang', 'zoom', 'preset-drawer-w']) {
+          const legacy = localStorage.getItem('lsc-' + key);
+          if (legacy !== null) {
+            if (localStorage.getItem('llamadeck-' + key) === null) {
+              localStorage.setItem('llamadeck-' + key, legacy);
+            }
+            localStorage.removeItem('lsc-' + key);
+          }
+        }
+        if (localStorage.getItem('llamadeck-theme') === 'graphite') {
+          document.documentElement.dataset.theme = 'graphite';
+        }
+        // lang is not decoration: CSS text-transform is language-sensitive, and
+        // every uppercased heading in the app is wrong in Turkish without it —
+        // "Sistem" uppercases to SISTEM instead of SİSTEM, "Güç tüketimi" to
+        // GÜÇ TÜKETIMI instead of GÜÇ TÜKETİMİ. Set here rather than only on
+        // toggle so the first paint is already correct.
+        if (localStorage.getItem('llamadeck-lang') === 'tr') {
+          document.documentElement.lang = 'tr';
+        }
+        // A ?pane=1 document is the right half of a split view. Mark it before
+        // paint so the prerendered rail never flashes there, and leave its zoom
+        // alone — the parent already zooms the <iframe> box.
+        var pane = location.search.indexOf('pane=') !== -1;
+        if (pane) {
+          document.documentElement.dataset.pane = '1';
+        } else {
+          var z = parseFloat(localStorage.getItem('llamadeck-zoom') || '1');
+          if (z > 0 && Math.abs(z - 1) > 0.001) {
+            document.documentElement.style.zoom = String(z);
+            document.documentElement.style.setProperty('--zoom', String(z));
+          }
+        }
+      } catch (e) { /* localStorage unavailable — keep defaults */ }
+    </script>
+    <link href="/_app/immutable/entry/start.CQRyXNLS.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/BB_PG200.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/DAsoRHR2.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/Doo8d_Zg.js" rel="modulepreload">
+		<link href="/_app/immutable/entry/app.COmaUVIT.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/D3b4xqUe.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/FsmlzcJI.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/YpbTNJJW.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/DhXVB3Ye.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/D2ZAlPpE.js" rel="modulepreload">
+		
+  </head>
+  <body data-sveltekit-preload-data="hover" class="h-full">
+    <div style="display: contents" class="h-full">
+			<script>
+				{
+					__sveltekit_1u0tonu = {
+						base: ""
+					};
+
+					const element = document.currentScript.parentElement;
+
+					Promise.all([
+						import("/_app/immutable/entry/start.CQRyXNLS.js"),
+						import("/_app/immutable/entry/app.COmaUVIT.js")
+					]).then(([kit, app]) => {
+						kit.start(app, element);
+					});
+				}
+			</script>
+		</div>
+  </body>
+</html>

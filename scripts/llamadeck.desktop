@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=LlamaDeck
+GenericName=Local LLM control panel
+Comment=Web UI + REST/MCP for managing llama.cpp llama-server (presets, models, downloads, build, bench)
+Exec=@PROJECT_DIR@/scripts/llamadeck-launcher.sh
+Icon=@PROJECT_DIR@/assets/llamadeck-icon-wordmark.svg
+Terminal=false
+Categories=Development;
+StartupNotify=true
+StartupWMClass=@WMCLASS@
+Keywords=llama;llamacpp;llamadeck;server;llm;gguf;qwen;controller;

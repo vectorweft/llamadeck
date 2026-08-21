@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128"
+     role="img" aria-label="LLDeck">
+  <title>LlamaDeck</title>
+  <!-- LlamaDeck, wordmark variant of llamadeck-icon.svg: the same deck of model
+       cards, compressed upward to make room for the name inside the tile.
+
+       The word is "LLDeck", not "LlamaDeck": ten letters across 120px land at
+       ~11px per glyph and turn to mush the moment the icon is scaled down at
+       all. Six letters stay legible, and the deck above them carries the rest
+       of the identity. "LL" takes the emerald so the name is tied to the lit
+       (loaded) card below it, exactly as SGDeck ties "SG" to its active lane.
+
+       Use this at 48px and up: desktop entry, app header, README, screenshots.
+       At 16-32px use llamadeck-icon.svg, which has no text.
+
+       Palette unchanged from the dashboard: slate-800/900 ground, emerald-400
+       accent, slate-200 for the neutral half of the word.
+
+       Before a release, run the text through a font-to-outline pass so the
+       icon does not depend on Inter being installed on the viewer's machine. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e293b"/>
+      <stop offset="1" stop-color="#0f172a"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="120" height="120" rx="22" fill="url(#bg)" stroke="#334155" stroke-width="2"/>
+
+  <!-- the deck: three cards, back to front, the front one active -->
+  <g stroke-width="0">
+    <rect x="28" y="22" width="64" height="16" rx="5" fill="#475569"/>
+    <rect x="24" y="42" width="72" height="16" rx="5" fill="#64748b"/>
+    <rect x="20" y="62" width="80" height="18" rx="5" fill="#34d399"/>
+  </g>
+  <!-- slot markers on the active card — the busy/idle row on the dashboard -->
+  <g fill="#0f172a">
+    <rect x="28" y="67" width="6" height="6" rx="2"/>
+    <rect x="39" y="67" width="6" height="6" rx="2"/>
+    <rect x="50" y="67" width="6" height="6" rx="2"/>
+  </g>
+
+  <!-- live indicator dot, top-right -->
+  <circle cx="104" cy="22" r="6" fill="#34d399"/>
+  <circle cx="104" cy="22" r="6" fill="#34d399" opacity="0.35">
+    <animate attributeName="r" values="6;10;6" dur="2.4s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.35;0;0.35" dur="2.4s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- wordmark, inside the tile -->
+  <text x="64" y="105" text-anchor="middle"
+        font-family="'Inter var','Inter','Noto Sans',system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif"
+        font-size="21" font-weight="700" letter-spacing="0.2">
+    <tspan fill="#34d399">LL</tspan><tspan fill="#e2e8f0">Deck</tspan>
+  </text>
+</svg>

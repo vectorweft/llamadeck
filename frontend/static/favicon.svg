@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- Browser-tab twin of assets/llamadeck-icon.svg. Same artwork, no
+       animation: a tab icon is redrawn at 16px and the pulse is invisible
+       there, so it is only work for the compositor.
+
+       app.html asks for %sveltekit.assets%/favicon.svg, and this directory is
+       what adapter-static copies into backend/lld/static. Without the file the
+       request fell through to the SPA catch-all and the browser was handed
+       index.html with a 200 — a tab with no icon and no error to explain it. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e293b"/>
+      <stop offset="1" stop-color="#0f172a"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="120" height="120" rx="22" fill="url(#bg)" stroke="#334155" stroke-width="2"/>
+  <g stroke-width="0">
+    <rect x="30" y="30" width="68" height="18" rx="5" fill="#475569"/>
+    <rect x="26" y="54" width="76" height="18" rx="5" fill="#64748b"/>
+    <rect x="22" y="78" width="84" height="20" rx="5" fill="#34d399"/>
+  </g>
+  <g fill="#0f172a">
+    <rect x="30" y="85" width="6" height="6" rx="2"/>
+    <rect x="41" y="85" width="6" height="6" rx="2"/>
+    <rect x="52" y="85" width="6" height="6" rx="2"/>
+  </g>
+  <circle cx="103" cy="25" r="6" fill="#34d399"/>
+</svg>

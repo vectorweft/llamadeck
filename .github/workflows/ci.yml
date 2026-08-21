@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  # Every branch, not just main: development happens on other branches here,
+  # and a suite that only runs after the merge is a suite that finds things
+  # late. The concurrency group below keeps the cost of that in check.
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# A second push to the same branch cancels the first — no point finishing a run
+# for code that has already been replaced.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11 is the floor declared in pyproject. The upper end matters more
+        # than it looks: supervisor.py depends on asyncio StreamReader details
+        # (readuntil's LimitOverrunError.consumed) that are easy to have
+        # regress between releases.
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --python ${{ matrix.python }} --all-extras
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Tests
+        run: uv run pytest backend/tests -q
+
+  launcher:
+    name: launcher (end to end)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Every launcher bug so far has been silent: the icon is clicked and
+      # nothing happens, with nothing logged anywhere. This suite stubs the
+      # browser, the terminal and the backend, and asserts the one thing that
+      # matters — did a window get opened. It needs no display.
+      - name: Launcher end-to-end tests
+        run: bash scripts/test-launcher.sh
+        timeout-minutes: 10
+
+      - name: Shell syntax
+        run: |
+          for f in scripts/*.sh; do
+            bash -n "$f" || exit 1
+          done
+
+  frontend:
+    name: frontend build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+        working-directory: frontend
+
+      # Type/template check. `npm run build` alone does NOT catch this class:
+      # a duplicate key in tr.ts compiled fine and only svelte-check saw it.
+      - name: Check
+        run: npm run check
+        working-directory: frontend
+
+      # Only that it compiles. Not that the output matches the committed
+      # bundle: SvelteKit stamps a build id into version.json, which cascades
+      # into every content hash, so a byte-comparison would fail on every run
+      # while telling us nothing.
+      - name: Build
+        run: npm run build
+        working-directory: frontend

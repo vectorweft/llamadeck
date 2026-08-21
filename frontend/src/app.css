@@ -1,0 +1,221 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Theme tokens. Every Tailwind hue (slate/emerald/amber/rose/cyan/violet/sky)
+ * resolves to these variables (see tailwind.config.js), so a theme is just a
+ * variable set. Values are "R G B" triplets so /alpha modifiers keep working.
+ *
+ * :root            → "Slate"    — the original navy-dark look (default).
+ * [data-theme=graphite] → "Graphite" — neutral warm-gray dark, higher text
+ *                    contrast, grass-green/orange/red/blue/purple accents.
+ */
+:root {
+  /*
+   * In-app zoom factor, mirrored from the CSS `zoom` we set on <html>.
+   * `zoom` multiplies every length, but `vh` still resolves against the raw
+   * viewport — so a plain `70vh` box ends up `70 * zoom` percent of the screen
+   * and spills off the bottom. Size viewport-relative boxes with `--vh`
+   * instead: `h-[calc(70*var(--vh))]`.
+   */
+  /* Both themes are dark. Without this the browser draws its native widgets
+     from the light palette — the popup list a <select> opens, the scrollbars,
+     the date and number spinners — so a dark control opened a grey menu. */
+  color-scheme: dark;
+
+  --zoom: 1;
+  --vh: calc(1vh / var(--zoom));
+
+  /* slate (stock Tailwind) */
+  --slate-100: 241 245 249;
+  --slate-200: 226 232 240;
+  --slate-300: 203 213 225;
+  --slate-400: 148 163 184;
+  --slate-500: 100 116 139;
+  --slate-600: 71 85 105;
+  --slate-700: 51 65 85;
+  --slate-800: 30 41 59;
+  --slate-900: 15 23 42;
+  --slate-950: 2 6 23;
+  /* emerald */
+  --emerald-100: 209 250 229;
+  --emerald-200: 167 243 208;
+  --emerald-300: 110 231 183;
+  --emerald-400: 52 211 153;
+  --emerald-500: 16 185 129;
+  --emerald-600: 5 150 105;
+  --emerald-700: 4 120 87;
+  --emerald-800: 6 95 70;
+  --emerald-900: 6 78 59;
+  --emerald-950: 2 44 34;
+  /* amber */
+  --amber-100: 254 243 199;
+  --amber-200: 253 230 138;
+  --amber-300: 252 211 77;
+  --amber-400: 251 191 36;
+  --amber-500: 245 158 11;
+  --amber-600: 217 119 6;
+  --amber-700: 180 83 9;
+  --amber-800: 146 64 14;
+  --amber-900: 120 53 15;
+  --amber-950: 69 26 3;
+  /* rose */
+  --rose-100: 255 228 230;
+  --rose-200: 254 205 211;
+  --rose-300: 253 164 175;
+  --rose-400: 251 113 133;
+  --rose-500: 244 63 94;
+  --rose-600: 225 29 72;
+  --rose-700: 190 18 60;
+  --rose-800: 159 18 57;
+  --rose-900: 136 19 55;
+  --rose-950: 76 5 25;
+  /* cyan */
+  --cyan-100: 207 250 254;
+  --cyan-200: 165 243 252;
+  --cyan-300: 103 232 249;
+  --cyan-400: 34 211 238;
+  --cyan-500: 6 182 212;
+  --cyan-600: 8 145 178;
+  --cyan-700: 14 116 144;
+  --cyan-800: 21 94 117;
+  --cyan-900: 22 78 99;
+  --cyan-950: 8 51 68;
+  /* violet */
+  --violet-100: 237 233 254;
+  --violet-200: 221 214 254;
+  --violet-300: 196 181 253;
+  --violet-400: 167 139 250;
+  --violet-500: 139 92 246;
+  --violet-600: 124 58 237;
+  --violet-700: 109 40 217;
+  --violet-800: 91 33 182;
+  --violet-900: 76 29 149;
+  --violet-950: 46 16 101;
+  /* sky */
+  --sky-400: 56 189 248;
+}
+
+/* Split-view pane: the rail belongs to the parent document only. Hidden here
+   as well as in the markup so the prerendered HTML does not flash it before
+   hydration. */
+:root[data-pane] .app-rail {
+  display: none;
+}
+
+:root[data-theme='graphite'] {
+  /* neutral base: near-black page, clearly elevated panels, brighter text */
+  --slate-100: 236 238 241;
+  --slate-200: 222 225 230;
+  --slate-300: 200 204 211;
+  --slate-400: 172 178 188;
+  --slate-500: 142 149 161;
+  --slate-600: 112 119 131;
+  --slate-700: 70 74 84;
+  --slate-800: 48 51 59;
+  --slate-900: 33 35 41;
+  --slate-950: 15 16 18;
+  /* green (grassier than emerald) */
+  --emerald-100: 220 252 231;
+  --emerald-200: 187 247 208;
+  --emerald-300: 134 239 172;
+  --emerald-400: 74 222 128;
+  --emerald-500: 34 197 94;
+  --emerald-600: 22 163 74;
+  --emerald-700: 21 128 61;
+  --emerald-800: 22 101 52;
+  --emerald-900: 20 83 45;
+  --emerald-950: 5 46 22;
+  /* orange (instead of amber) */
+  --amber-100: 255 237 213;
+  --amber-200: 254 215 170;
+  --amber-300: 253 186 116;
+  --amber-400: 251 146 60;
+  --amber-500: 249 115 22;
+  --amber-600: 234 88 12;
+  --amber-700: 194 65 12;
+  --amber-800: 154 52 18;
+  --amber-900: 124 45 18;
+  --amber-950: 67 20 7;
+  /* red (instead of rose) */
+  --rose-100: 254 226 226;
+  --rose-200: 254 202 202;
+  --rose-300: 252 165 165;
+  --rose-400: 248 113 113;
+  --rose-500: 239 68 68;
+  --rose-600: 220 38 38;
+  --rose-700: 185 28 28;
+  --rose-800: 153 27 27;
+  --rose-900: 127 29 29;
+  --rose-950: 69 10 10;
+  /* blue (instead of cyan) */
+  --cyan-100: 219 234 254;
+  --cyan-200: 191 219 254;
+  --cyan-300: 147 197 253;
+  --cyan-400: 96 165 250;
+  --cyan-500: 59 130 246;
+  --cyan-600: 37 99 235;
+  --cyan-700: 29 78 216;
+  --cyan-800: 30 64 175;
+  --cyan-900: 30 58 138;
+  --cyan-950: 23 37 84;
+  /* purple (instead of violet) */
+  --violet-100: 243 232 255;
+  --violet-200: 233 213 255;
+  --violet-300: 216 180 254;
+  --violet-400: 192 132 252;
+  --violet-500: 168 85 247;
+  --violet-600: 147 51 234;
+  --violet-700: 126 34 206;
+  --violet-800: 107 33 168;
+  --violet-900: 88 28 135;
+  --violet-950: 59 7 100;
+  /* sky */
+  --sky-400: 125 211 252;
+}
+
+html, body { height: 100%; }
+body { font-family: ui-sans-serif, system-ui, sans-serif; }
+
+/*
+ * Graphite is a full skin, not just a palette: sharp corners, solid elevated
+ * panels on a near-black page, an accent-striped header and console-style
+ * "❯" headings. Utility classes are overridden under the theme scope so the
+ * markup stays shared between skins.
+ */
+:root[data-theme='graphite'] .rounded-lg { border-radius: 4px; }
+:root[data-theme='graphite'] .rounded { border-radius: 3px; }
+
+/* Slate uses translucent panels that melt into the page; Graphite uses
+ * solid cards with real elevation. */
+:root[data-theme='graphite'] .bg-slate-900\/40,
+:root[data-theme='graphite'] .bg-slate-900\/20 {
+  background-color: rgb(var(--slate-900));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 6px 18px rgb(0 0 0 / 0.45);
+}
+/* Inner tiles/theads read as recessed insets instead of lighter overlays. */
+:root[data-theme='graphite'] .bg-slate-900\/60,
+:root[data-theme='graphite'] .bg-slate-900\/80 {
+  background-color: rgb(var(--slate-950) / 0.55);
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.35);
+}
+
+/* Sidebar: solid rail with a green accent stripe and drop shadow (the
+ * graphite counterpart of the old accent-striped header). */
+:root[data-theme='graphite'] aside {
+  background-color: rgb(var(--slate-900));
+  border-right-color: rgb(var(--slate-700));
+  border-left: 2px solid rgb(var(--emerald-500));
+  box-shadow: 4px 0 14px rgb(0 0 0 / 0.4);
+}
+
+/* Console-style page titles. */
+:root[data-theme='graphite'] h1 {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 0.02em;
+}
+:root[data-theme='graphite'] h1::before {
+  content: '❯ ';
+  color: rgb(var(--emerald-400));
+}

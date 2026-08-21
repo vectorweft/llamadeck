@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- LlamaDeck. A deck of model cards stacked in a slate tile, the top one
+       lit emerald because it is the one that is loaded, plus the pulsing
+       status dot from the dashboard.
+
+       Deliberately not a lettermark: at 16px in a browser tab three letters
+       are mud, while three offset bars still read as a stack. The palette is
+       the dashboard's (slate-800/900 ground, emerald-400 accent) so the icon
+       and the app look like the same product. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e293b"/>
+      <stop offset="1" stop-color="#0f172a"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="120" height="120" rx="22" fill="url(#bg)" stroke="#334155" stroke-width="2"/>
+
+  <!-- the deck: three cards, back to front, the front one active -->
+  <g stroke-width="0">
+    <rect x="30" y="30" width="68" height="18" rx="5" fill="#475569"/>
+    <rect x="26" y="54" width="76" height="18" rx="5" fill="#64748b"/>
+    <rect x="22" y="78" width="84" height="20" rx="5" fill="#34d399"/>
+  </g>
+  <!-- slot markers on the active card — the busy/idle row on the dashboard -->
+  <g fill="#0f172a">
+    <rect x="30" y="85" width="6" height="6" rx="2"/>
+    <rect x="41" y="85" width="6" height="6" rx="2"/>
+    <rect x="52" y="85" width="6" height="6" rx="2"/>
+  </g>
+
+  <!-- live indicator dot, top-right -->
+  <circle cx="103" cy="25" r="6" fill="#34d399"/>
+  <circle cx="103" cy="25" r="6" fill="#34d399" opacity="0.35">
+    <animate attributeName="r" values="6;10;6" dur="2.4s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.35;0;0.35" dur="2.4s" repeatCount="indefinite"/>
+  </circle>
+</svg>

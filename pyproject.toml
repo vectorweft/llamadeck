@@ -1,0 +1,71 @@
+[project]
+name = "llamadeck"
+version = "0.1.0"
+description = "LlamaDeck — the control deck for llama.cpp: web UI, REST API, and MCP server for managing llama-server"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+keywords = ["llama.cpp", "llama-server", "llm", "gguf", "mcp", "local-ai", "inference"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS :: MacOS X",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "httpx>=0.27",
+    "aiosqlite>=0.20",
+    "psutil>=6.0",
+    "huggingface-hub>=0.26",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    # mcp 2.x renamed FastMCP -> mcp.server.mcpserver.MCPServer; mcp_server.py
+    # supports both majors via a shim. The <3 cap keeps a future rename from
+    # breaking `uvx llamadeck` for everyone the day it lands.
+    "mcp>=1.9,<3",
+    "gguf>=0.18.0",
+    "anthropic>=0.116.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/vectorweft/llamadeck"
+Issues = "https://github.com/vectorweft/llamadeck/issues"
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "ruff>=0.7"]
+
+[project.scripts]
+llamadeck = "lld.cli:main"
+llamadeck-mcp = "lld.mcp_server:main"
+# Short aliases, matching the `lld` import package.
+lld = "lld.cli:main"
+lld-mcp = "lld.mcp_server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# The SvelteKit build output (backend/lld/static) is gitignored but must ship
+# inside the wheel so `uvx llamadeck` serves the UI with no Node.js on the
+# host. `artifacts` whitelists it past the ignore rules for both targets
+# (the wheel is built from the sdist). Run `npm run build` in frontend/
+# before building a release wheel.
+[tool.hatch.build]
+artifacts = ["backend/lld/static/**"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend/lld"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

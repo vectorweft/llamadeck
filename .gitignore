@@ -1,0 +1,30 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Build output
+dist/
+build/
+
+# Frontend
+frontend/node_modules/
+frontend/.svelte-kit/
+# backend/lld/static/ is deliberately NOT ignored: it is the built SvelteKit
+# bundle the backend serves, so an install works without a Node toolchain.
+
+# Runtime state — machine-specific, and `state` is a symlink out of the repo
+# into ~/.config/llamadeck (settings, presets, tokens, the model DB).
+logs/
+state
+*.log
+
+# Local scratch
+prompt.txt
+.claude/
+
+# OS
+.DS_Store
