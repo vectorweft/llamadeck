@@ -27,7 +27,7 @@ jobs:
         # regress between releases.
         python: ["3.11", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -47,7 +47,7 @@ jobs:
     name: launcher (end to end)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Every launcher bug so far has been silent: the icon is clicked and
       # nothing happens, with nothing logged anywhere. This suite stubs the
@@ -67,9 +67,9 @@ jobs:
     name: frontend build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: npm

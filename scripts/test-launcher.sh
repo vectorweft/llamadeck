@@ -118,8 +118,22 @@ cleanup() {
 trap cleanup EXIT
 
 check() {  # $1=label  $2=expected(open|noop)
-    local got="noop"
-    [ -s "$MARK_BROWSER" ] && got="open"
+    # The launcher starts the browser with `&` + disown and exits immediately —
+    # it must not block the desktop while a window comes up. So the stub writes
+    # its marker AFTER the launcher has already returned, and sampling the
+    # marker the instant run_launcher finishes is a race the assertion loses
+    # whenever the machine is slow enough. Invisible on an idle workstation; on
+    # a 2-core CI runner it failed three of the fast-path cases at random while
+    # the launcher was behaving perfectly.
+    #
+    # So wait for the window rather than assuming it has had time to appear. An
+    # "open" case returns the moment the marker shows up; a "noop" case has to
+    # stay empty for the whole window before the absence is believed.
+    local got="noop" _i
+    for _i in $(seq 1 60); do          # up to 6 s
+        [ -s "$MARK_BROWSER" ] && { got="open"; break; }
+        sleep 0.1
+    done
     if [ "$got" = "$2" ]; then
         echo "  PASS  $1"
         PASS=$((PASS + 1))
