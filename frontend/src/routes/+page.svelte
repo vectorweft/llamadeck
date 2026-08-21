@@ -430,7 +430,11 @@
         <div class="mt-4 pt-3 border-t border-slate-800">
           <div class="text-[11px] uppercase tracking-wider text-slate-500 mb-2 font-mono">{t('VRAM consumers')}</div>
           <div class="space-y-1.5">
-            {#each vram.processes as p (p.pid)}
+            <!-- Unkeyed on purpose: a process spanning two GPUs is reported
+                 once per GPU, so the pid is not unique. Keying on it made a
+                 dual-GPU router preset trip each_key_duplicate, which took the
+                 whole VRAM panel down. These rows never reorder. -->
+            {#each vram.processes as p}
               {@const pct = totalMb > 0 ? (p.used_mb / totalMb) * 100 : 0}
               {@const labelColor = p.preset ? (p.adopted ? 'text-amber-300' : 'text-emerald-300') : 'text-slate-300'}
               <div class="flex items-center gap-3 text-xs font-mono">
@@ -786,7 +790,7 @@
           <div class="mt-3 grid gap-6 lg:grid-cols-2">
             <div class="space-y-1.5">
               {#if vram.processes && vram.processes.length > 0}
-                {#each vram.processes as p (p.pid)}
+                {#each vram.processes as p}
                   {@const pct = totalMb > 0 ? (p.used_mb / totalMb) * 100 : 0}
                   {@const labelColor = p.preset ? (p.adopted ? 'text-amber-300' : 'text-emerald-300') : 'text-slate-300'}
                   <div class="flex items-center gap-3 text-xs font-mono">
