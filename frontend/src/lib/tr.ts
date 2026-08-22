@@ -582,16 +582,50 @@ export const tr: Record<string, string> = {
 
   // ---- router ----
   'All loaded models will be evicted from memory.': 'Yüklü tüm modeller bellekten kaldırılacak.',
-  'Wrote {bytes} bytes to {path}.\nRestart the router for changes to take effect.':
-    "{path} dosyasına {bytes} bayt yazıldı.\nDeğişikliklerin etkili olması için router'ı yeniden başlatın.",
+  'Wrote {bytes} bytes to {path}.\nUse Reload INI to push it into the running router — a restart is not needed.':
+    "{path} dosyasına {bytes} bayt yazıldı.\nÇalışan router'a geçirmek için INI'yi Yeniden Yükle — yeniden başlatmaya gerek yok.",
+  // Dashboard: a preset with nothing to do is not a broken preset.
+  'working': 'çalışıyor',
+  'idle · ready': 'boşta · hazır',
+  'peak': 'zirve',
+  'Prefill runs in bursts, so this reads 0 between requests. The peak is the fastest prefill seen since this page was opened.':
+    'Prefill dalgalar hâlinde çalışır, istekler arasında 0 okur. Zirve, bu sayfa açıldığından beri görülen en hızlı prefill değeridir.',
+  // Router INI drift: the file on disk vs the table llama-server parsed at startup.
+  'The INI on disk is ahead of the running router': "Diskteki INI, çalışan router'ın önünde",
+  'llama-server reads the preset file once, at startup. These settings are saved but not in effect yet.':
+    'llama-server preset dosyasını yalnızca açılışta okur. Bu ayarlar kaydedildi ama henüz yürürlükte değil.',
+  'Reload INI': "INI'yi yeniden yükle",
+  'Reloading…': 'Yeniden yükleniyor…',
+  'Reload': 'Yeniden yükle',
+  'Reload the INI into the router?': "INI router'a yüklensin mi?",
+  '{n} loaded model(s) changed in the INI and will be evicted: {list}.\nThey reload on the next request, with the new settings.':
+    "INI'de değişen {n} yüklü model bellekten atılacak: {list}.\nBir sonraki istekte yeni ayarlarla geri yüklenirler.",
+  'The router re-reads the INI. Nothing that is loaded changed, so nothing gets evicted.':
+    "Router INI'yi yeniden okur. Yüklü olanlarda değişiklik yok, hiçbir şey bellekten atılmaz.",
+  'In the INI': "INI'de",
+  'Running with': 'Çalışan değer',
+  'Model': 'Model',
+  'Key': 'Ayar',
+  '… and {n} more': '… ve {n} tane daha',
+  'The INI says {ini} — reload to apply it.':
+    "INI {ini} diyor — uygulamak için yeniden yükleyin.",
+  'Context the router would launch this model with, read from its own argv — not from the preset file.':
+    "Router'ın bu modeli başlatacağı context — modelin kendi argv'sinden okundu, preset dosyasından değil.",
+  'Fallback for models without their own INI section. The router process itself takes no ctx/ngl.':
+    "Kendi INI bölümü olmayan modeller için yedek değer. Router process'inin kendisi ctx/ngl almaz.",
+  'Context this model actually loaded with, summed over its slots.':
+    'Bu modelin gerçekten yüklendiği context — slot\'ların toplamı.',
+  'default': 'varsayılan',
+  'loaded': 'yüklü',
+  'models': 'model',
   'INI written': 'INI yazıldı',
   'restart-free model switching without dropping the process.': "process'i düşürmeden restart'sız model değişimi.",
   'No router-mode preset defined. On the': 'Router modunda preset tanımlı değil.',
   'page, create one with': 'sayfasında şununla bir tane oluşturun:',
   "No models found. Check the router's models_dir setting.": "Model bulunamadı. Router'ın models_dir ayarını kontrol edin.",
   '(start a router preset to see a preview)': '(önizleme için bir router preset başlatın)',
-  "<strong>The INI is the single source of truth for per-model settings.</strong> The <code>[*]</code> global section comes from the router preset (ctx/ngl/parallel defaults). Each <code>[&lt;model_id&gt;]</code> section is generated from a sibling single-mode preset whose <code>model_path</code> lives under <code>models_dir</code>; section keys override <code>[*]</code>. The router's CLI is deliberately kept minimal (only bind + control flags) so per-model INI settings actually win — llama-server precedence is CLI &gt; per-model &gt; <code>[*]</code>. After writing, restart the router for changes to take effect.":
-    "<strong>Model başına ayarların tek doğruluk kaynağı INI'dir.</strong> <code>[*]</code> global bölümü router preset'inden gelir (ctx/ngl/parallel varsayılanları). Her <code>[&lt;model_id&gt;]</code> bölümü, <code>model_path</code>'i <code>models_dir</code> içinde olan kardeş single-mode preset'ten üretilir; bölüm anahtarları <code>[*]</code>'ı geçersiz kılar. Router'ın CLI'ı bilinçli olarak minimal tutulur (yalnızca bind + kontrol flag'leri) ki model başına INI ayarları gerçekten kazansın — llama-server önceliği CLI &gt; model başına &gt; <code>[*]</code> şeklindedir. Yazdıktan sonra değişikliklerin etkili olması için router'ı yeniden başlatın.",
+  "<strong>The INI is the single source of truth for per-model settings.</strong> The <code>[*]</code> global section comes from the router preset (ctx/ngl/parallel defaults). Each <code>[&lt;model_id&gt;]</code> section is generated from a sibling single-mode preset whose <code>model_path</code> lives under <code>models_dir</code>; section keys override <code>[*]</code>. The router's CLI is deliberately kept minimal (only bind + control flags) so per-model INI settings actually win — llama-server precedence is CLI &gt; per-model &gt; <code>[*]</code>. llama-server reads this file <strong>once, at startup</strong>: after writing it, press <strong>Reload INI</strong> to push it into the running router — only a model whose settings changed is evicted, and it comes back on the next request.":
+    "<strong>Model başına ayarların tek doğruluk kaynağı INI'dir.</strong> <code>[*]</code> global bölümü router preset'inden gelir (ctx/ngl/parallel varsayılanları). Her <code>[&lt;model_id&gt;]</code> bölümü, <code>model_path</code>'i <code>models_dir</code> içinde olan kardeş single-mode preset'ten üretilir; bölüm anahtarları <code>[*]</code>'ı geçersiz kılar. Router'ın CLI'ı bilinçli olarak minimal tutulur (yalnızca bind + kontrol flag'leri) ki model başına INI ayarları gerçekten kazansın — llama-server önceliği CLI &gt; model başına &gt; <code>[*]</code> şeklindedir. llama-server bu dosyayı <strong>yalnızca açılışta bir kez</strong> okur: yazdıktan sonra çalışan router'a geçirmek için <strong>INI'yi yeniden yükle</strong>'ye basın — yalnızca ayarı değişen model bellekten atılır, o da bir sonraki istekte geri gelir.",
 
   'This page manages the models inside a running router process.':
     "Bu sayfa, çalışan router process'inin içindeki modelleri yönetir.",

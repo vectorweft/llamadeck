@@ -1,1 +1,0 @@
-import{g as n}from"./DAsoRHR2.js";const o=n({items:[]});let a=1;function c(s,t="info",i=4e3){const e=a++;o.items.push({id:e,kind:t,text:s}),setTimeout(()=>m(e),i)}function m(s){const t=o.items.findIndex(i=>i.id===s);t>=0&&o.items.splice(t,1)}export{o as a,m as d,c as t};

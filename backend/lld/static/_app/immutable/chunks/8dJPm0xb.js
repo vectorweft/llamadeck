@@ -1,0 +1,1 @@
+import{a as s,f as e}from"./B4dd3j0H.js";import{t as m}from"./B3AH4CJd.js";import{b as p}from"./CP4uWkMe.js";import{p as l}from"./BFswNMyZ.js";var f=e("<div></div>");function c(t,o){let r=l(o,"class",3,"h-4 w-full");var a=f();m(()=>p(a,1,`animate-pulse rounded bg-slate-800/60 ${r()??""}`)),s(t,a)}export{c as S};

@@ -298,7 +298,7 @@ class ProcessHandle:
         if self.is_running():
             raise SupervisorError(f"{self.preset_name}: already running")
         if _port_in_use(self.cfg.host, self.cfg.port):
-            raise SupervisorError(f"{self.preset_name}: port {self.cfg.port} already in use by something else")
+            raise SupervisorError(port_conflict_message(self.preset_name, self.cfg.port))
         missing = self._missing_paths()
         if missing:
             raise SupervisorError(f"{self.preset_name}: {missing}")
@@ -932,6 +932,56 @@ def get_supervisor(llama_bin: str | None = None) -> MultiSupervisor:
             raise RuntimeError("supervisor not initialized and no binary path provided")
         _instance = MultiSupervisor(llama_bin)
     return _instance
+
+
+def port_owner(port: int) -> psutil.Process | None:
+    """The process listening on `port`, or None if it cannot be identified.
+
+    psutil needs elevated rights to name the owner of *another user's* socket;
+    ours are our own, so this answers in the case that matters. A failure to
+    look it up is not an error — the caller falls back to a vaguer message.
+    """
+    try:
+        for c in psutil.net_connections(kind="inet"):
+            if c.laddr and c.laddr.port == port and c.status == psutil.CONN_LISTEN and c.pid:
+                return psutil.Process(c.pid)
+    except (psutil.Error, PermissionError, OSError):
+        pass
+    return None
+
+
+def port_conflict_message(preset_name: str, port: int, expect_binary: str | None = None) -> str:
+    """Say *who* holds the port, not just that somebody does.
+
+    The old message was "port 8085 already in use by something else". On
+    2026-08-22 the "something else" was that preset's own llama-server, still
+    serving, merely dropped from tracking by a Release click — and the message
+    sent the user hunting for a phantom second install instead of at the Adopt
+    button two sections up the page.
+    """
+    proc = port_owner(port)
+    if proc is None:
+        return (
+            f"{preset_name}: port {port} is already in use, and the owning process could not "
+            f"be identified. Free the port or give this preset a different one."
+        )
+    try:
+        cmdline = proc.cmdline()
+        name = proc.name()
+    except (psutil.Error, OSError):
+        cmdline, name = [], "?"
+    ours = bool(cmdline) and "llama-server" in (cmdline[0] if cmdline else "")
+    if ours:
+        return (
+            f"{preset_name}: port {port} is held by PID {proc.pid}, an llama-server that "
+            f"LlamaDeck is not tracking — usually one that was released, or started outside "
+            f"the app. Adopt it on the Server page to take it back over, or stop that process "
+            f"first. It is still serving requests in the meantime."
+        )
+    return (
+        f"{preset_name}: port {port} is held by PID {proc.pid} ({name}), which is not a "
+        f"llama-server. Stop it, or give this preset a different port."
+    )
 
 
 def _port_in_use(host: str, port: int) -> bool:
