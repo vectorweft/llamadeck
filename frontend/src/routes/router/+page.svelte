@@ -246,7 +246,10 @@
                   {#if loadedIds.length > 0}
                     <span class="text-cyan-300 font-mono">
                       {#each models.filter((m) => loadedIds.includes(m.id)) as lm (lm.id)}
-                        · {lm.id}{#if ctxOf(lm)} <span class="text-slate-400">ctx {ctxOf(lm)}</span>{/if}{#if argOf(lm, 'port') && argOf(lm, 'port') !== '0'}<span class="text-slate-600">:{argOf(lm, 'port')}</span>{/if}
+                        <!-- Explicit {' '} separators: Svelte collapses the
+                             whitespace between an expression and a tag, which
+                             rendered "...visionctx 132,000:44531". -->
+                        · {lm.id}{#if ctxOf(lm)}{' '}<span class="text-slate-400">ctx {ctxOf(lm)}</span>{/if}{#if argOf(lm, 'port') && argOf(lm, 'port') !== '0'}{' '}<span class="text-slate-600">:{argOf(lm, 'port')}</span>{/if}
                       {/each}
                     </span>
                   {/if}
