@@ -590,6 +590,11 @@ export const tr: Record<string, string> = {
   'peak': 'zirve',
   'Prefill runs in bursts, so this reads 0 between requests. The peak is the fastest prefill seen since this page was opened.':
     'Prefill dalgalar hâlinde çalışır, istekler arasında 0 okur. Zirve, bu sayfa açıldığından beri görülen en hızlı prefill değeridir.',
+  'These flags need a value and have none — the model will exit the moment the router loads it.':
+    'Bu flag\'ler bir değer bekliyor ama değersiz — router modeli yükler yüklemez model çıkacak.',
+  'expects': 'beklenen:',
+  "Fix it in the preset's extra_flags, then regenerate the INI.":
+    "Preset'in extra_flags alanında düzeltip INI'yi yeniden üretin.",
   // Router INI drift: the file on disk vs the table llama-server parsed at startup.
   'The INI on disk is ahead of the running router': "Diskteki INI, çalışan router'ın önünde",
   'llama-server reads the preset file once, at startup. These settings are saved but not in effect yet.':

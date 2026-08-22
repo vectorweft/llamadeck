@@ -309,6 +309,20 @@ export interface RouterModels {
   ini_error?: string;
 }
 
+/** An extra_flag that llama-server would refuse for want of a value. In the
+ *  INI it becomes `flag = true`, which fails only when a model is loaded. */
+export interface RouterFlagWarning {
+  preset: string;
+  flag: string;
+  placeholder: string;
+}
+
+export interface RouterIni {
+  path: string;
+  ini: string;
+  flag_warnings?: RouterFlagWarning[];
+}
+
 export interface RouterActive {
   running: boolean;
   preset: string | null;
@@ -626,9 +640,9 @@ export const api = {
   routerUnload: (model: string) =>
     req<{ success: boolean }>('/api/router/unload', { method: 'POST', body: JSON.stringify({ model }) }),
   routerIniPreview: (models_dir: string | null = null) =>
-    req<{ path: string; ini: string }>('/api/router/ini/preview' + (models_dir ? `?models_dir=${encodeURIComponent(models_dir)}` : '')),
+    req<RouterIni>('/api/router/ini/preview' + (models_dir ? `?models_dir=${encodeURIComponent(models_dir)}` : '')),
   routerIniWrite: (models_dir: string | null = null) =>
-    req<{ path: string; ini: string; bytes: number }>('/api/router/ini/write', { method: 'POST', body: JSON.stringify({ models_dir }) }),
+    req<RouterIni & { bytes: number }>('/api/router/ini/write', { method: 'POST', body: JSON.stringify({ models_dir }) }),
 
   featuresList: (opts: { unseen_only?: boolean; arch?: string; scan_to?: string; limit?: number } = {}) => {
     const qs = new URLSearchParams();

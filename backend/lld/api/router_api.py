@@ -9,6 +9,7 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from ..flag_catalog import flags_missing_values, get_flag_catalog
 from ..presets import PresetRegistry
 from ..router_drift import ini_drift
 from ..router_ini import render_ini, write_ini
@@ -240,6 +241,46 @@ async def unload(body: LoadBody) -> dict:
     raise HTTPException(status_code=400, detail="empty model id")
 
 
+async def _extra_flag_warnings(models_dir: str | None) -> list[dict]:
+    """Preset extra_flags the router would turn into a value-less INI key.
+
+    Single mode refuses to spawn over this (`ProcessHandle._check_flag_values`)
+    because llama-server rejects the whole command line for it. The router path
+    had no equivalent and failed far more quietly: `--tools` with no value is
+    rendered as `tools = true`, llama.cpp reads "true" as a *tool name*, and the
+    model exits 1 the instant it is loaded — the router flips it back to
+    "unloaded" and the only trace is a line in the router's own log.
+
+    Advisory: a binary that cannot be queried yields no warnings, and nothing
+    here blocks writing the INI.
+    """
+    if not models_dir:
+        return []
+    try:
+        catalog = await get_flag_catalog(get_supervisor().binary)
+    except Exception:  # noqa: BLE001 - advisory only
+        return []
+    md = Path(models_dir)
+    out: list[dict] = []
+    for cfg in PresetRegistry().list():
+        extra = list(getattr(cfg, "extra_flags", None) or [])
+        if not extra or getattr(cfg, "mode", "single") != "single":
+            continue
+        if not cfg.model_path:
+            continue
+        try:
+            Path(cfg.model_path).resolve().relative_to(md)
+        except (ValueError, OSError):
+            continue  # this router does not serve the preset
+        for m in flags_missing_values(catalog, ["llama-server", *extra]):
+            out.append({
+                "preset": cfg.name,
+                "flag": m["flag"],
+                "placeholder": m.get("placeholder") or "",
+            })
+    return out
+
+
 @router.get("/ini/preview")
 async def ini_preview(models_dir: str | None = None) -> dict:
     """Render the INI without writing. Defaults to the active router's models_dir."""
@@ -255,7 +296,11 @@ async def ini_preview(models_dir: str | None = None) -> dict:
             status_code=400,
             detail="models_dir required (no router running and not provided)",
         )
-    return {"path": str(INI_PATH), "ini": render_ini(md, router_preset=_first_router_preset())}
+    return {
+        "path": str(INI_PATH),
+        "ini": render_ini(md, router_preset=_first_router_preset()),
+        "flag_warnings": await _extra_flag_warnings(md),
+    }
 
 
 @router.post("/ini/write")
@@ -273,4 +318,9 @@ async def ini_write(body: IniBody) -> dict:
             detail="models_dir required (no router running and not provided)",
         )
     text = write_ini(Path(INI_PATH), md, router_preset=_first_router_preset())
-    return {"path": str(INI_PATH), "ini": text, "bytes": len(text)}
+    return {
+        "path": str(INI_PATH),
+        "ini": text,
+        "bytes": len(text),
+        "flag_warnings": await _extra_flag_warnings(md),
+    }

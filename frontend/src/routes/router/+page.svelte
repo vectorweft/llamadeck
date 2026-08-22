@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import { api, type LlamaConfig, type RouterActive, type RouterIniDrift, type RouterModel } from '$lib/api';
+  import { api, type LlamaConfig, type RouterActive, type RouterFlagWarning, type RouterIniDrift, type RouterModel } from '$lib/api';
   import { confirmDialog, alertDialog } from '$lib/confirm';
   import { t } from '$lib/i18n.svelte';
 
@@ -14,6 +14,10 @@
    *  startup. The router never notices on its own — see routerReload(). */
   let drift = $state<RouterIniDrift[]>([]);
   let iniPath = $state<string | null>(null);
+  /** extra_flags that will become `flag = true` in the INI and kill the model
+   *  at load time. Single mode refuses to start over these; the router used to
+   *  swallow them. */
+  let flagWarnings = $state<RouterFlagWarning[]>([]);
   let reloading = $state(false);
   let driftModels = $derived([...new Set(drift.map((d) => d.model))]);
   let loadedIds = $derived(
@@ -64,6 +68,7 @@
         try {
           const p = await api.routerIniPreview();
           iniPreview = p.ini;
+          flagWarnings = p.flag_warnings ?? [];
         } catch {
           // INI preview only works if router is running or models_dir provided
         }
@@ -159,6 +164,7 @@
     try {
       const r = await api.routerIniWrite();
       iniPreview = r.ini;
+      flagWarnings = r.flag_warnings ?? [];
       await alertDialog(t('Wrote {bytes} bytes to {path}.\nUse Reload INI to push it into the running router — a restart is not needed.', { bytes: r.bytes, path: r.path }), { title: t('INI written') });
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
@@ -412,6 +418,18 @@
     </div>
     <!-- eslint-disable-next-line svelte/no-at-html-tags — sözlükten gelen kendi HTML'imiz -->
     <p class="text-xs text-slate-500">{@html t("<strong>The INI is the single source of truth for per-model settings.</strong> The <code>[*]</code> global section comes from the router preset (ctx/ngl/parallel defaults). Each <code>[&lt;model_id&gt;]</code> section is generated from a sibling single-mode preset whose <code>model_path</code> lives under <code>models_dir</code>; section keys override <code>[*]</code>. The router's CLI is deliberately kept minimal (only bind + control flags) so per-model INI settings actually win — llama-server precedence is CLI &gt; per-model &gt; <code>[*]</code>. llama-server reads this file <strong>once, at startup</strong>: after writing it, press <strong>Reload INI</strong> to push it into the running router — only a model whose settings changed is evicted, and it comes back on the next request.")}</p>
+    {#if flagWarnings.length > 0}
+      <div class="rounded border border-amber-800 bg-amber-950/20 p-3 space-y-1.5">
+        <p class="text-xs text-amber-300">{t('These flags need a value and have none — the model will exit the moment the router loads it.')}</p>
+        {#each flagWarnings as w (w.preset + w.flag)}
+          <p class="text-xs font-mono text-slate-300">
+            <span class="text-amber-300">{w.preset}</span> · <code>{w.flag}</code>
+            {#if w.placeholder}<span class="text-slate-500"> {t('expects')} {w.placeholder}</span>{/if}
+          </p>
+        {/each}
+        <p class="text-[11px] text-slate-500">{t('Fix it in the preset\'s extra_flags, then regenerate the INI.')}</p>
+      </div>
+    {/if}
     <pre class="rounded border border-slate-800 bg-slate-950/60 p-3 text-xs font-mono text-slate-300 overflow-x-auto whitespace-pre">{iniPreview || t('(start a router preset to see a preview)')}</pre>
   </section>
 </div>
