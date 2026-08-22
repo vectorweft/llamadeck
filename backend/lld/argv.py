@@ -57,7 +57,6 @@ _FIELD_FLAGS: list[tuple[str, str, str]] = [
     # which is llama-server's own default, so it emits nothing — a preset that
     # never touches the setting produces the exact command it did before.
     ("reasoning", "--reasoning", "tri_state"),
-    ("reasoning_effort", "--reasoning-effort", "str_value"),
     ("spec_type", "--spec-type", "enum_value"),
     ("model_path_draft", "--model-draft", "str_value"),
     ("n_gpu_layers_draft", "-ngld", "value"),
@@ -219,7 +218,6 @@ _FLAG_ALIASES = {
     "--override-tensor": {"-ot"},
     "--main-gpu": {"-mg"},
     "--reasoning": {"-rea"},
-    "--reasoning-effort": set(),
 }
 
 

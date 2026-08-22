@@ -173,8 +173,6 @@ export interface LlamaConfig {
    *  Note that thinking and instruct modes want DIFFERENT sampling; the model
    *  recipes on the Model tab apply both together. */
   reasoning?: 'auto' | 'on' | 'off';
-  /** `--reasoning-effort`: minimal | low | medium | high | xhigh | max. */
-  reasoning_effort?: string | null;
   /** A raw command line that REPLACES everything rendered from the fields
    *  above. When set, this is exactly what runs — see the Command tab. The
    *  fields are re-read from it on save, so the rest of the app still knows

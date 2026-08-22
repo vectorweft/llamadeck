@@ -38,7 +38,6 @@ _INI_FIELDS: list[tuple[str, str]] = [
     # byte-identical to before. A dual-mode model (Qwen3.x, DeepSeek-R1) can
     # otherwise only be pinned to one mode for the whole router process.
     ("reasoning", "reasoning"),
-    ("reasoning_effort", "reasoning-effort"),
     # Speculative decoding (only emitted when the preset actually enables it):
     # spec_type="none" stays out so the router section doesn't carry a no-op.
     ("spec_type", "spec-type"),

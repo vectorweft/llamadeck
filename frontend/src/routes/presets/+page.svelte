@@ -102,7 +102,7 @@
       jinja: false, metrics: true, slots: true,
       spec_type: 'none', model_path_draft: null, n_gpu_layers_draft: 999, draft_max: null, draft_min: null,
       devices: [], tensor_split: null,
-      reasoning: 'auto', reasoning_effort: null, argv_override: null,
+      reasoning: 'auto', argv_override: null,
       env: {}, extra_flags: [], notes: '',
       estimated_vram_mb: null,
       mode: 'single', models_dir: null, models_max: 1, models_autoload: true,
@@ -1327,19 +1327,6 @@
               <option value="auto">{t('auto — let the chat template decide')}</option>
               <option value="on">on — --reasoning on</option>
               <option value="off">off — --reasoning off</option>
-            </select>
-          </label>
-          <label class="block">
-            <span class="text-slate-400">reasoning_effort</span>
-            <select
-              value={editing.reasoning_effort ?? ''}
-              onchange={(e) => editing!.reasoning_effort = (e.currentTarget as HTMLSelectElement).value || null}
-              class="mt-1 w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 font-mono"
-            >
-              <option value="">{t('template default')}</option>
-              {#each ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as eff}
-                <option value={eff}>{eff}</option>
-              {/each}
             </select>
           </label>
           <label class="flex items-center gap-2 text-sm"><input type="checkbox" bind:checked={editing.jinja} /> jinja</label>

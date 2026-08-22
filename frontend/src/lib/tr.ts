@@ -892,7 +892,6 @@ export const tr: Record<string, string> = {
   'no recommendation found': 'öneri bulunamadı',
   Thinking: 'Düşünme',
   effort: 'çaba',
-  'template default': 'şablon varsayılanı',
   '“auto” leaves it to the chat template — llama-server’s own default. Forcing it emits --reasoning on|off; the sampling for each mode is what the recipes below set.':
     '“auto” kararı sohbet şablonuna bırakır — llama-server\'ın kendi varsayılanı. Zorlarsanız --reasoning on|off eklenir; her modun örnekleme değerlerini aşağıdaki tarifler ayarlar.',
   yours: 'sizin',
@@ -900,8 +899,8 @@ export const tr: Record<string, string> = {
     '{path} dosyasına bu model (ya da herhangi biri) için kendi tariflerinizi ekleyebilirsiniz — burada “sizin” etiketiyle görünürler.',
 
 
-  'This is the server-side default. A client can still flip one request with chat_template_kwargs {"enable_thinking": false} or reasoning_effort "none" — the request wins.':
-    'Bu, sunucu tarafındaki varsayılan. İstemci tek bir isteği chat_template_kwargs {"enable_thinking": false} ya da reasoning_effort "none" ile çevirebilir — istek kazanır.',
+  'This is the server-side default. A client can still flip one request with chat_template_kwargs {"enable_thinking": false} — the request wins. Note that reasoning_effort does NOT do this: templates that take it have no "off" level.':
+    'Bu, sunucu tarafındaki varsayılan. İstemci tek bir isteği chat_template_kwargs {"enable_thinking": false} ile çevirebilir — istek kazanır. reasoning_effort bunu YAPMAZ: onu kabul eden şablonlarda "kapalı" diye bir kademe yok.',
 
   'this architecture': 'bu mimari',
   'any model': 'her model',

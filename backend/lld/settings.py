@@ -424,11 +424,13 @@ class LlamaServerConfig:
     #            DIFFERS between the two modes — see model_defaults.py, where
     #            Qwen3.6 wants temp 1.0/top_p 0.95 thinking and
     #            temp 0.7/top_p 0.80/presence 1.5 instruct.
+    # There is deliberately no reasoning-EFFORT field beside this one. How hard
+    # a model thinks is a per-request preference and belongs to the caller, which
+    # sends `reasoning_effort` itself; pinning a level here only sets a floor the
+    # caller cannot see. Whether a dual-mode model thinks AT ALL is different —
+    # that is a deployment decision, and for callers that cannot send
+    # `chat_template_kwargs` it is the only lever, so it stays.
     reasoning: str = "auto"
-    # `--reasoning-effort`: 'minimal'|'low'|'medium'|'high'|'xhigh'|'max',
-    # passed through to the chat template. None → don't emit, keep the
-    # template's own default.
-    reasoning_effort: str | None = None
 
     jinja: bool = False
     metrics: bool = True

@@ -72,6 +72,18 @@ class PresetRegistry:
             if item.get(k) in (None, ""):
                 item[k] = v
 
+        # Legacy `reasoning_effort`, removed as a field: how hard a model thinks
+        # is the caller's per-request preference, not a deployment setting. A
+        # preset that pinned one keeps doing exactly what it did — the value
+        # moves down to the raw flag layer instead of being dropped silently by
+        # the forward-compat filter below.
+        legacy_effort = item.pop("reasoning_effort", None)
+        if legacy_effort not in (None, ""):
+            flags = list(item.get("extra_flags") or [])
+            if "--reasoning-effort" not in flags:
+                flags += ["--reasoning-effort", str(legacy_effort)]
+                item["extra_flags"] = flags
+
         # Drop keys that aren't valid dataclass fields (forward-compat).
         valid = {f.name for f in _fields(LlamaServerConfig)}
         return {k: v for k, v in item.items() if k in valid}

@@ -130,3 +130,52 @@ def test_migration_never_targets_a_redirected_state_dir(tmp_path, monkeypatch):
 def test_the_state_dir_can_be_overridden_by_environment(tmp_path, monkeypatch):
     monkeypatch.setenv("LLAMADECK_STATE_DIR", str(tmp_path / "sandbox"))
     assert settings_mod._state_dir() == tmp_path / "sandbox"
+
+
+# --- reasoning_effort: field removed, value kept ---------------------------
+#
+# How hard a model thinks is the caller's per-request preference, so the preset
+# schema no longer carries it. The presets on disk still do, and dropping them
+# on the next save would quietly change what a server serves — which is the one
+# failure mode a config file must never have.
+
+def _sanitize(item):
+    from lld.presets import PresetRegistry
+    return PresetRegistry._sanitize(dict(item))
+
+
+def test_a_pinned_reasoning_effort_moves_to_the_raw_flag_layer():
+    out = _sanitize({"name": "p", "model_path": "/m.gguf", "reasoning_effort": "low"})
+    assert "reasoning_effort" not in out
+    assert out["extra_flags"] == ["--reasoning-effort", "low"]
+
+
+def test_it_is_appended_beside_flags_the_preset_already_had():
+    out = _sanitize({
+        "name": "p", "model_path": "/m.gguf", "reasoning_effort": "xhigh",
+        "extra_flags": ["--min-p", "0"],
+    })
+    assert out["extra_flags"] == ["--min-p", "0", "--reasoning-effort", "xhigh"]
+
+
+def test_an_effort_already_written_by_hand_is_not_duplicated():
+    out = _sanitize({
+        "name": "p", "model_path": "/m.gguf", "reasoning_effort": "low",
+        "extra_flags": ["--reasoning-effort", "medium"],
+    })
+    assert out["extra_flags"] == ["--reasoning-effort", "medium"]
+
+
+def test_a_preset_that_never_set_one_gains_no_flags():
+    for value in (None, ""):
+        out = _sanitize({"name": "p", "model_path": "/m.gguf", "reasoning_effort": value})
+        assert out["extra_flags"] == []
+
+
+def test_the_config_still_loads_and_the_flag_reaches_the_command():
+    from lld.settings import LlamaServerConfig
+    from lld import argv
+    cfg = LlamaServerConfig(**_sanitize(
+        {"name": "p", "model_path": "/m.gguf", "reasoning": "on", "reasoning_effort": "low"}))
+    assert cfg.reasoning == "on"
+    assert "--reasoning-effort low" in " ".join(argv.to_argv(cfg, "/bin/llama-server"))

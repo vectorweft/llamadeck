@@ -98,7 +98,6 @@
     onapply({ ...config, reasoning: v });
   }
 
-  const EFFORTS = ['', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 
   const sourceLabel = (src: string) => {
     if (src === 'gguf') return t('from the GGUF itself');
@@ -145,24 +144,12 @@
                           : 'bg-slate-900 text-slate-400 hover:text-slate-200'}">{opt}</button>
             {/each}
           </div>
-          <label class="flex items-center gap-1.5 text-[11px] text-slate-400">
-            {t('effort')}
-            <select
-              value={config.reasoning_effort ?? ''}
-              onchange={(e) => onapply({ ...config, reasoning_effort: (e.currentTarget as HTMLSelectElement).value || null })}
-              class="rounded bg-slate-800 border border-slate-700 px-1.5 py-0.5 font-mono text-[11px]"
-            >
-              {#each EFFORTS as eff}
-                <option value={eff}>{eff === '' ? t('template default') : eff}</option>
-              {/each}
-            </select>
-          </label>
         </div>
         <div class="text-[11px] text-slate-500">
           {t('“auto” leaves it to the chat template — llama-server’s own default. Forcing it emits --reasoning on|off; the sampling for each mode is what the recipes below set.')}
         </div>
         <div class="text-[11px] text-slate-600">
-          {t('This is the server-side default. A client can still flip one request with chat_template_kwargs {"enable_thinking": false} or reasoning_effort "none" — the request wins.')}
+          {t('This is the server-side default. A client can still flip one request with chat_template_kwargs {"enable_thinking": false} — the request wins. Note that reasoning_effort does NOT do this: templates that take it have no "off" level.')}
         </div>
       </div>
     {/if}
