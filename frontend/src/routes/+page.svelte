@@ -16,6 +16,11 @@
 
   let statuses = $state<Record<string, PresetStatus>>({});
   let frames = $state<Record<string, MetricsFrame | null>>({});
+  /** Best prompt-rate ever sampled for a preset while this page has been open.
+   *  Prefill lasts a fraction of a second on a short prompt, so the 30 s
+   *  sparkline window is empty again before anyone looks — leaving pp reading
+   *  0 forever, which is exactly what "the preset looks dead" means. */
+  let ppSeen = $state<Record<string, number>>({});
   let history = $state<Record<string, MetricsFrame[]>>({});
   let recDefaults = $state<Record<string, ModelDefaults | null>>({});
   let vram = $state<VramReport | null>(null);
@@ -110,6 +115,8 @@
   function openStream(name: string) {
     const es = openMetricsStream(name, (f) => {
       frames[name] = f;
+      const pp = f.instant_prompt_tps ?? 0;
+      if (pp > (ppSeen[name] ?? 0)) ppSeen[name] = pp;
       const h = history[name] ?? [];
       h.push(f);
       if (h.length > SPARK_LEN) h.splice(0, h.length - SPARK_LEN);
@@ -130,6 +137,7 @@
       for (const [name, entry] of Object.entries(snap.presets)) {
         history[name] = entry.history;
         frames[name] = entry.latest;
+        ppSeen[name] = Math.max(0, ...entry.history.map((h) => h.instant_prompt_tps ?? 0));
       }
     } catch { /* ignore */ }
     await Promise.all([refreshStatuses(), refreshVram()]);
@@ -371,9 +379,13 @@
     {@const totDecoded = tokensRows.reduce((a, r) => a + r.decoded, 0)}
     {@const totPrompt = tokensRows.reduce((a, r) => a + r.prompt, 0)}
     {@const totLive = tokensRows.reduce((a, r) => a + r.live, 0)}
+    <!-- ctx comes from the slots (sum of every slot's n_ctx), not from the
+         preset: on a router the preset's ctx_size is only the INI's [*]
+         fallback, and the model in front of you may have loaded with a
+         completely different one. -->
     {@const loadedModels = running.flatMap(s => {
       const m = frames[s.name]?.loaded_model_id;
-      return m ? [{ preset: s.name, model: m }] : [];
+      return m ? [{ preset: s.name, model: m, ctx: frames[s.name]?.kv_cache_max_tokens ?? 0 }] : [];
     })}
     {#if layout === 'classic'}
     <div class="grid gap-4 lg:grid-cols-2">
@@ -487,6 +499,11 @@
             {#each loadedModels as lm (lm.preset)}
               <div class="flex items-baseline gap-3 flex-wrap">
                 <span class="text-xl font-mono font-semibold text-cyan-300 break-all">{lm.model}</span>
+                {#if lm.ctx > 0}
+                  <span class="text-xs font-mono text-slate-400 tabular-nums"
+                    title={t('Context this model actually loaded with, summed over its slots.')}
+                  >ctx {lm.ctx.toLocaleString()}</span>
+                {/if}
                 <span class="text-xs font-mono text-slate-500">{lm.preset}</span>
               </div>
             {/each}
@@ -848,6 +865,14 @@
     {@const recP = rec?.sampling?.top_p}
     {@const liveDecode = rollingTps(hist, 'instant_decode_tps', 3)}
     {@const rollingVals = hist.map((_, i, a) => rollingTps(a.slice(0, i + 1), 'instant_decode_tps', 3))}
+    <!-- Prefill is bursty: at a 2 Hz poll the instant pp rate reads 0 between
+         requests, so the *peak* over the window is the number that proves the
+         model ingested anything at all. Both are shared by the two layouts. -->
+    {@const ppLive = rollingTps(hist, 'instant_prompt_tps', 3)}
+    {@const ppPeak = Math.max(0, ...rollingSeries(hist, 'instant_prompt_tps', 3))}
+    {@const ppTotal = f?.prom?.['llamacpp:prompt_tokens_total'] ?? 0}
+    {@const tgTotal = f?.prom?.['llamacpp:tokens_predicted_total'] ?? 0}
+    {@const busyNow = (f?.requests_processing ?? 0) > 0}
     {@const activeJobs = f?.active_jobs ?? []}
     {@const recentJobs = f?.recent_jobs ?? []}
     {@const sparkMax = Math.max(1, ...rollingVals)}
@@ -856,7 +881,9 @@
          preset's `parallel` only before metrics arrive. Never Math.max over a
          stale config — that showed 8 slots for a 1-slot preset. -->
     {@const slotCount = (f?.total_slots ?? 0) > 0 ? f!.total_slots : (f?.slots?.length || s.config.parallel || 1)}
-    {@const perSlotCtx = Math.round(s.config.ctx_size / Math.max(1, slotCount))}
+    <!-- Live first: a router preset's config.ctx_size is the INI [*] default,
+         which is not what the loaded model runs at. -->
+    {@const perSlotCtx = Math.round((f?.kv_cache_max_tokens || s.config.ctx_size) / Math.max(1, slotCount))}
     {@const cardLabel = modelLabel(s.config, s.name)}
     <!-- Router presets: the loaded model is the headline; the preset name demotes to a
          small chip. Never repeat the same string as title + preset + port. -->
@@ -982,6 +1009,12 @@
           {/if}
           <StatusPill adopted={s.adopted} pid={s.pid} />
           <span class="text-xs text-slate-500 font-mono">up {formatUptime(s.uptime_seconds)}</span>
+          <!-- A loaded model with nothing to do reads 0 tok/s, which looks
+               identical to a broken one. Name the state instead. -->
+          <span class="inline-flex items-center gap-1.5 rounded border px-2 py-0.5 text-[11px] font-mono {busyNow ? 'border-emerald-700 bg-emerald-950/30 text-emerald-300' : 'border-slate-700 bg-slate-900/60 text-slate-400'}">
+            <span class="h-1.5 w-1.5 rounded-full {busyNow ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}"></span>
+            {busyNow ? t('working') : t('idle · ready')}
+          </span>
         </div>
         {#if f?.error}
           <span class="text-xs text-rose-400 font-mono">{t('metrics error: {e}', { e: f.error })}</span>
@@ -989,10 +1022,10 @@
       </div>
 
       <!-- Stat row -->
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <div class="rounded bg-slate-900/60 border border-slate-800 p-3">
           <div class="text-xs uppercase tracking-wider text-slate-500">decode tok/s <span class="text-[11px] text-slate-600">{t('(3 s avg)')}</span></div>
-          <div class="text-2xl font-mono text-emerald-400 leading-tight">{fmt(liveDecode, 1)}</div>
+          <div class="text-2xl font-mono leading-tight {liveDecode > 0 ? 'text-emerald-400' : 'text-slate-500'}">{fmt(liveDecode, 1)}</div>
           {#if activeJobs.length > 0}
             {@const j = activeJobs[0]}
             <div class="text-[11px] text-slate-500 font-mono">
@@ -1010,7 +1043,25 @@
           {:else}
             <div class="text-[11px] text-slate-500 font-mono">{t('no jobs yet')}</div>
           {/if}
-          <div class="text-[11px] text-slate-600 font-mono">lifetime {fmt(f?.lifetime_decode_tps, 1)}</div>
+          <!-- llama.cpp's *_tokens_seconds gauges are per-scrape buckets: at a
+               2 Hz poll they read 0 almost always, and a permanent "lifetime
+               0.0" under a live number is the same 0-means-broken trap. Show
+               it only when the scrape actually caught a rate. -->
+          {#if (f?.lifetime_decode_tps ?? 0) > 0}
+            <div class="text-[11px] text-slate-600 font-mono">lifetime {fmt(f?.lifetime_decode_tps, 1)}</div>
+          {/if}
+        </div>
+        <!-- pp had no tile at all in this layout: the only prefill number on
+             screen was the kv-cache meter, so a preset that had just ingested
+             a 40k prompt at 600 tok/s looked as idle as one doing nothing. -->
+        <div class="rounded bg-slate-900/60 border border-slate-800 p-3">
+          <div class="text-xs uppercase tracking-wider text-slate-500">prompt tok/s <span class="text-[11px] text-slate-600">{t('(3 s avg)')}</span></div>
+          <div class="text-2xl font-mono leading-tight {ppLive > 0 ? 'text-cyan-400' : 'text-slate-500'}">{fmt(ppLive, 0)}</div>
+          <div class="text-[11px] text-slate-500 font-mono"
+            title={t('Prefill runs in bursts, so this reads 0 between requests. The peak is the fastest prefill seen since this page was opened.')}>
+            {t('peak')} <span class="text-cyan-300">{fmt(Math.max(ppPeak, ppSeen[s.name] ?? 0), 0)}</span>
+          </div>
+          <div class="text-[11px] text-slate-600 font-mono">{compactNum(ppTotal)} pr · {compactNum(tgTotal)} dec</div>
         </div>
         <div class="rounded bg-slate-900/60 border border-slate-800 p-3">
           <div lang="en" class="text-xs uppercase tracking-wider text-slate-500">active</div>

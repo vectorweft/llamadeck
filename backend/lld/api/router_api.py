@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ..presets import PresetRegistry
+from ..router_drift import ini_drift
 from ..router_ini import render_ini, write_ini
 from ..settings import STATE_DIR
 from ..supervisor import get_supervisor
@@ -37,11 +38,9 @@ class IniBody(BaseModel):
 
 def _running_router() -> dict:
     """Return the status dict of the first running router preset, else 409."""
-    sup = get_supervisor()
-    for status in sup.statuses(vram_estimates=False).values():
-        cfg = status.get("config") or {}
-        if cfg.get("mode") == "router" and status.get("running"):
-            return status
+    status = _pick_router()
+    if status is not None:
+        return status
     raise HTTPException(
         status_code=409,
         detail="no router preset is running — start a preset with mode=router first",
@@ -87,32 +86,88 @@ def _filter_models(payload: dict) -> dict:
     return payload
 
 
-@router.get("/models")
-async def list_models() -> dict:
-    """Proxy GET /models on the running router. Returns
-    `{"data": [], "running": false}` when no router is up so callers can poll
-    without try/except gymnastics."""
+def _pick_router() -> dict | None:
     sup = get_supervisor()
-    chosen = None
     for status in sup.statuses(vram_estimates=False).values():
         cfg = status.get("config") or {}
         if cfg.get("mode") == "router" and status.get("running"):
-            chosen = status
-            break
-    if chosen is None:
-        return {"data": [], "models": [], "running": False, "router_preset": None}
-    url = f"{_base_url(chosen)}/models"
+            return status
+    return None
+
+
+def _ini_path_for(status: dict) -> Path:
+    """The INI the *running* router was launched with, not the one we would
+    write today. An adopted process carries its own `--models-preset`, and
+    comparing against the wrong file would invent drift."""
+    cfg = status.get("config") or {}
+    return Path(cfg.get("models_preset_path") or INI_PATH)
+
+
+def _attach_drift(payload: dict, status: dict) -> dict:
+    """Annotate a /models payload with how far the router's table has fallen
+    behind the INI on disk. Advisory only: a failure to read or parse the file
+    must never take the model list down with it."""
+    path = _ini_path_for(status)
+    payload["ini_path"] = str(path)
+    payload["ini_drift"] = []
     try:
-        async with httpx.AsyncClient(timeout=10) as c:
-            r = await c.get(url)
+        text = path.read_text()
+    except OSError as e:
+        payload["ini_error"] = str(e)
+        return payload
+    try:
+        payload["ini_drift"] = ini_drift(text, payload.get("data") or [])
+    except Exception as e:  # noqa: BLE001 - advisory, never fatal
+        payload["ini_error"] = f"drift check failed: {e}"
+    return payload
+
+
+async def _fetch_models(status: dict, reload: bool = False) -> dict:
+    params = {"reload": "1"} if reload else None
+    # A reload unloads every model whose preset changed, and unloading waits
+    # for the process to go away — 10 s is not enough for that.
+    timeout = 120 if reload else 10
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as c:
+            r = await c.get(f"{_base_url(status)}/models", params=params)
             r.raise_for_status()
             payload = r.json()
     except httpx.HTTPError as e:
         raise HTTPException(status_code=502, detail=f"router /models failed: {e}")
     payload = _filter_models(payload)
     payload["running"] = True
-    payload["router_preset"] = chosen.get("name")
-    return payload
+    payload["router_preset"] = status.get("name")
+    return _attach_drift(payload, status)
+
+
+@router.get("/models")
+async def list_models() -> dict:
+    """Proxy GET /models on the running router. Returns
+    `{"data": [], "running": false}` when no router is up so callers can poll
+    without try/except gymnastics.
+
+    Read-only on purpose: the reload that re-reads the INI lives behind
+    POST /reload, because this endpoint is polled every few seconds and a
+    reload evicts running models.
+    """
+    chosen = _pick_router()
+    if chosen is None:
+        return {"data": [], "models": [], "running": False, "router_preset": None, "ini_drift": []}
+    return await _fetch_models(chosen)
+
+
+@router.post("/reload")
+async def reload_ini() -> dict:
+    """Make the router re-read its `--models-preset` INI.
+
+    llama-server parses that file once, at startup; every later edit — ours
+    included — is invisible to the running process until this call. The router
+    reconciles by unloading any *running* model whose preset changed (it comes
+    back on the next request, with the new settings), so this is a model-level
+    restart, not a process-level one.
+    """
+    status = _running_router()
+    return await _fetch_models(status, reload=True)
 
 
 def _id_candidates(model: str) -> list[str]:

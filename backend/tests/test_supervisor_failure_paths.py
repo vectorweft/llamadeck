@@ -15,7 +15,12 @@ import stat
 import pytest
 
 from lld.settings import LlamaServerConfig
-from lld.supervisor import ProcessHandle, SupervisorError
+from lld.supervisor import (
+    ProcessHandle,
+    SupervisorError,
+    port_conflict_message,
+    port_owner,
+)
 
 
 def _fake_server(tmp_path, script: str) -> str:
@@ -189,3 +194,36 @@ async def test_unqueryable_binary_does_not_block_a_pinned_preset(tmp_path):
     devices_mod.invalidate_cache()
     h = _handle(_fake_server(tmp_path, "exit 1\n"), devices=["CUDA0"])
     await h._check_devices()  # must not raise
+
+
+def test_a_taken_port_names_the_process_that_took_it():
+    """"Port already in use by something else" was true and useless: on
+    2026-08-22 the "something else" was the preset's own router, released from
+    tracking by one click and still serving. The message has to carry the PID
+    so the next step is Adopt, not a hunt."""
+    import socket
+
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    sock.listen()
+    port = sock.getsockname()[1]
+    try:
+        owner = port_owner(port)
+        if owner is None:
+            pytest.skip("psutil cannot enumerate listening sockets in this environment")
+        assert owner.pid == os.getpid()
+        msg = port_conflict_message("preset-x", port)
+        assert f"PID {os.getpid()}" in msg
+        # This holder is the test runner, not a llama-server: no Adopt advice.
+        assert "not a llama-server" in msg
+    finally:
+        sock.close()
+
+
+def test_an_unowned_port_still_gets_a_next_step():
+    """Nothing is listening, so psutil finds no owner. The caller only reaches
+    this path when the connect() probe succeeded, but the message must still
+    stand on its own rather than trailing off."""
+    msg = port_conflict_message("preset-x", 1)
+    assert "preset-x" in msg and "port 1" in msg
+    assert "different one" in msg or "PID" in msg

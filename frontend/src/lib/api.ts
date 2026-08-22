@@ -288,6 +288,27 @@ export interface RouterModel {
   status?: { value: 'loaded' | 'unloaded' | 'loading' | 'sleeping'; args?: string[]; failed?: boolean; exit_code?: number };
 }
 
+/** One key where the INI on disk and the router's parsed table disagree.
+ *  `key` is "(model)" when a whole section is missing from the router. */
+export interface RouterIniDrift {
+  model: string;
+  key: string;
+  ini: string;
+  live: string;
+}
+
+export interface RouterModels {
+  data: RouterModel[];
+  running?: boolean;
+  router_preset?: string | null;
+  /** The INI the *running* router was launched with. */
+  ini_path?: string;
+  /** Empty when the router's table matches the file. */
+  ini_drift?: RouterIniDrift[];
+  /** Set when the drift check itself could not run — never fatal. */
+  ini_error?: string;
+}
+
 export interface RouterActive {
   running: boolean;
   preset: string | null;
@@ -596,7 +617,10 @@ export const api = {
     req<BenchJob>('/api/bench/cancel', { method: 'POST' }),
 
   routerActive: () => req<RouterActive>('/api/router/active'),
-  routerModels: () => req<{ data: RouterModel[] }>('/api/router/models'),
+  routerModels: () => req<RouterModels>('/api/router/models'),
+  /** Make the router re-read its INI. Evicts any running model whose preset
+   *  changed — it reloads on the next request with the new settings. */
+  routerReload: () => req<RouterModels>('/api/router/reload', { method: 'POST' }),
   routerLoad: (model: string, autoload: boolean | null = null) =>
     req<{ success: boolean }>('/api/router/load', { method: 'POST', body: JSON.stringify({ model, autoload }) }),
   routerUnload: (model: string) =>
