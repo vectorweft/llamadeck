@@ -140,6 +140,38 @@ def test_empty_payload_does_not_flag_every_model_as_missing():
     assert ini_drift(INI, []) == []
 
 
+def test_a_flag_deleted_from_the_preset_is_reported_too():
+    """The reverse direction, and the reason it matters: `--tools` was removed
+    from a preset, the INI lost the line, and the router kept spawning the
+    model with `--tools true` — which is what made it unloadable in the first
+    place. Only reporting INI-side changes would call that "in sync"."""
+    live = [*LIVE_132K, "--tools", "true"]
+    assert {
+        "model": "qwen3.8-27b-R9700-vision",
+        "key": "tools",
+        "ini": "—",
+        "live": "true",
+    } in ini_drift(INI, _models(live))
+
+
+def test_a_key_that_moved_between_sections_is_not_a_deletion():
+    """ctx-size lives in both [*] and the model section here. Dropping it from
+    the section leaves the global in force — the key is still in the file, so
+    it is a value change at most, never a removal."""
+    ini = INI.replace("model = /m/Qwen3.8-27B-UD-Q6_K.gguf\nctx-size = 132000",
+                      "model = /m/Qwen3.8-27B-UD-Q6_K.gguf")
+    assert not any(d["ini"] == "—" for d in ini_drift(ini, _models(LIVE_132K)))
+
+
+def test_the_routers_own_control_flags_are_not_drift():
+    """llama.cpp copies its base params into every model it spawns, so a child
+    carries --metrics/--slots/--props that no INI ever set. Reporting those
+    would put a permanent banner on the page, which is how a real warning
+    stops being read."""
+    live = [*LIVE_132K, "--metrics", "--slots", "--props", "--no-webui"]
+    assert ini_drift(INI, _models(live)) == []
+
+
 def test_drift_is_measured_against_the_ini_the_router_was_launched_with():
     """An adopted router carries its own `--models-preset`, which need not be
     the file LlamaDeck would write today. Comparing against the wrong file

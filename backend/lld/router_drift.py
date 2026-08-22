@@ -19,10 +19,17 @@ and a key we have never heard of still gets compared correctly.
 """
 from __future__ import annotations
 
-# Flags the router injects per model regardless of the INI: bind address, the
-# per-model port it picks at load time, and the id it serves under. Comparing
-# them would report drift on every model forever.
-_INJECTED = {"host", "port", "alias"}
+# Flags a child model carries that never came from the INI: the bind address,
+# the per-model port picked at load time, the id it is served under, and the
+# router's own control flags, which llama.cpp copies from its base params into
+# every model it spawns. Comparing any of these would report drift on every
+# model forever.
+_INJECTED = {
+    "host", "port", "alias",
+    "metrics", "slots", "props", "no-webui",
+    "models-dir", "models-preset", "models-max", "models-autoload",
+    "no-models-autoload",
+}
 
 _TRUE = {"true", "yes", "on", "1", "enabled"}
 _FALSE = {"false", "no", "off", "0", "disabled"}
@@ -133,5 +140,14 @@ def ini_drift(ini_text: str, models: list[dict]) -> list[dict]:
                 out.append({"model": name, "key": key, "ini": val, "live": "—"})
             elif not _same(val, live_val):
                 out.append({"model": name, "key": key, "ini": val, "live": live_val})
+        # The other direction: a flag deleted from the preset is still in the
+        # router's table, and would keep being applied to every load. Only a
+        # key the INI no longer mentions *anywhere* counts, so a value moved
+        # between [*] and a section is not mistaken for a deletion.
+        anywhere = set(global_) | {k for sec in sections.values() for k in sec}
+        for key in live:
+            if key in _INJECTED or key in anywhere:
+                continue
+            out.append({"model": name, "key": key, "ini": "—", "live": live[key]})
     out.sort(key=lambda d: (d["model"], d["key"]))
     return out
