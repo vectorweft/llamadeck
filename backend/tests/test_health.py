@@ -183,3 +183,32 @@ async def test_an_unreachable_port_is_a_failure(monkeypatch):
     monkeypatch.setattr(hw.httpx, "AsyncClient", _Client)
     ok, detail = await hw._probe_alive("http://127.0.0.1:8080")
     assert ok is False and "ConnectError" in detail
+
+
+async def test_model_probe_never_triggers_a_load(monkeypatch):
+    """The router's default autoload=true makes a probe POST load the model it
+    names. A health probe must never do that — a stale "loaded" entry (child
+    killed by a GPU fault) would otherwise silently resurrect the wrong model.
+    autoload=false keeps the probe a pure check."""
+    import httpx
+
+    from lld import health_watchdog as hw
+
+    seen: dict = {}
+
+    class _Client:
+        def __init__(self, **_kw): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *_a): return False
+
+        async def post(self, url, **kw):
+            seen["url"] = url
+            seen["params"] = kw.get("params")
+            seen["json"] = kw.get("json")
+            return httpx.Response(200, json={})
+
+    monkeypatch.setattr(hw.httpx, "AsyncClient", _Client)
+    ok, detail = await hw._probe_model("http://127.0.0.1:8085", "Some-Model")
+    assert ok is True and detail == "ok"
+    assert seen["params"] == {"autoload": "false"}
+    assert seen["json"]["model"] == "Some-Model"

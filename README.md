@@ -98,6 +98,7 @@ uv run llamadeck serve
 - **Dashboard** — per-preset live tokens/sec sparklines, slot occupancy, KV cache usage, VRAM donut, uptime; SSE-streamed at 2 Hz.
 - **Downloads** — search HuggingFace, classify repos (model vs mmproj vs draft), pick a quant, download with progress + resume.
 - **Router mode** — manage llama-server's multi-model router: alias INI auto-generated from your presets, restart-free model swap.
+- **Page-cache pre-warm** — when a model with `--n-cpu-moe N` (MoE weights in system RAM) finishes loading, LlamaDeck warms the exact byte ranges of the CPU-offloaded expert tensors into the page cache. Without it, a cold page cache makes every decode step read expert weights from disk (measured: ~1 t/s vs ~19 t/s on a 96 GiB DeepSeek on an 89 GiB box).
 - **Build** — update and rebuild llama.cpp from source from the browser: pick the compute backend (auto / CUDA / Metal / HIP / Vulkan / CPU — only the ones your machine can actually build), job count, build history.
 - **Bench** — A/B benchmark presets or flag variations; results stored in SQLite.
 - **MCP server** — 30+ tools (`start_preset`, `switch_preset`, `wait_until_ready`, `hf_download`, `get_vram`, `bench_run`, `llama_backends`, …) so a Claude/MCP agent can pick, download, and launch the right model for its own task. See [docs/vram-swapping.md](docs/vram-swapping.md) for a worked example: an agent time-sharing one GPU between the LLM and ComfyUI.

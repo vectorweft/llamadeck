@@ -75,7 +75,14 @@ RESTART_WINDOW_S: float = 900.0  # 15 minutes
 
 
 async def _probe_model(router_base: str, model_id: str) -> tuple[bool, str]:
-    """End-to-end probe via /v1/chat/completions. Returns (ok, detail)."""
+    """End-to-end probe via /v1/chat/completions. Returns (ok, detail).
+
+    autoload=false is mandatory: this probe exists to CHECK a model that the
+    router reports as loaded. Without the flag the router's default autoload
+    (true) makes the probe itself load the model — so a stale "loaded" entry
+    (child killed by a GPU fault, or a state desync) gets silently reloaded,
+    and with several models the wrong one can come back.
+    """
     payload = {
         "model": model_id,
         "messages": [{"role": "user", "content": "ping"}],
@@ -85,7 +92,9 @@ async def _probe_model(router_base: str, model_id: str) -> tuple[bool, str]:
     try:
         async with httpx.AsyncClient(timeout=PROBE_TIMEOUT_S) as client:
             r = await client.post(
-                f"{router_base}/v1/chat/completions", json=payload,
+                f"{router_base}/v1/chat/completions",
+                params={"autoload": "false"},
+                json=payload,
             )
             if r.is_success:
                 return True, "ok"

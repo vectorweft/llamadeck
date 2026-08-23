@@ -14,6 +14,7 @@ from typing import AsyncIterator
 
 import httpx
 
+from .prewarm import prewarm_from_args, prewarm_from_config
 from .supervisor import MultiSupervisor
 
 log = logging.getLogger(__name__)
@@ -217,6 +218,10 @@ class MetricsService:
         self._task: asyncio.Task | None = None
         self._stop = asyncio.Event()
         self._client: httpx.AsyncClient | None = None
+        # (kind, id, port) tuples whose page-cache pre-warm has already been
+        # fired. Router children get a fresh port on every reload, so a reload
+        # warms again; single-mode keys on the pid so a restart does too.
+        self._prewarmed: set[tuple[str, str, int]] = set()
 
     def state(self, preset: str) -> PresetMetricsState:
         if preset not in self.states:
@@ -276,6 +281,7 @@ class MetricsService:
         is_router = cfg.get("mode") == "router"
         query_params: dict[str, str] = {}
         loaded_model_id: str | None = None
+        loaded_model_args: list[str] | None = None
         if is_router:
             try:
                 models_resp = await self._client.get(f"http://{host}:{port}/models")
@@ -283,6 +289,7 @@ class MetricsService:
                     for m in (models_resp.json() or {}).get("data", []):
                         if isinstance(m, dict) and (m.get("status") or {}).get("value") == "loaded":
                             loaded_model_id = m.get("id")
+                            loaded_model_args = (m.get("status") or {}).get("args") or []
                             break
             except Exception as e:
                 log.debug("%s: router /models probe failed: %s", preset, e)
@@ -303,6 +310,20 @@ class MetricsService:
             # model — /props is documented as non-load-triggering, but /slots
             # and /metrics aren't explicitly, and we saw them hang on unloaded.
             query_params = {"model": loaded_model_id, "autoload": "false"}
+            child_port = port
+            if loaded_model_args:
+                for i, tok in enumerate(loaded_model_args):
+                    if tok == "--port" and i + 1 < len(loaded_model_args):
+                        try:
+                            child_port = int(loaded_model_args[i + 1])
+                        except ValueError:
+                            pass
+                        break
+            self._maybe_prewarm("router", loaded_model_id, child_port, loaded_model_args or [])
+        else:
+            # Single-mode: the model is loaded by construction. Warm its
+            # CPU-offloaded expert pages once per (preset, pid).
+            self._maybe_prewarm("single", preset, int(status.get("pid") or 0), config=cfg)
 
         slots_raw: list = []
         prom_text: str = ""
@@ -543,6 +564,43 @@ class MetricsService:
             loaded_model_id=loaded_model_id,
         )
         st.append(frame)
+
+    # --- page-cache pre-warm ------------------------------------------------
+
+    def _maybe_prewarm(
+        self,
+        kind: str,
+        model_id: str,
+        port: int,
+        args: list[str] | None = None,
+        config: dict | None = None,
+    ) -> None:
+        """Fire a one-shot page-cache warm for a freshly loaded model's
+        CPU-offloaded expert tensors.
+
+        The warm runs in a worker thread so the poll loop is never blocked;
+        failures are logged, never fatal. Warming is idempotent per
+        (kind, model_id, port): a router reload gets a fresh child port and
+        warms again, single-mode keys on the server's pid.
+        """
+        key = (kind, model_id, int(port))
+        if key in self._prewarmed:
+            return
+        self._prewarmed.add(key)
+
+        def _work() -> None:
+            try:
+                if args is not None:
+                    prewarm_from_args(args)
+                elif config is not None:
+                    prewarm_from_config(config)
+            except Exception:
+                log.exception("prewarm failed for %s %s", kind, model_id)
+
+        try:
+            asyncio.get_running_loop().create_task(asyncio.to_thread(_work))
+        except RuntimeError:
+            _work()
 
     # --- subscriptions ---
 
