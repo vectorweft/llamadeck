@@ -43,12 +43,15 @@ def test_roundtrip_qwen36_coding():
     assert cfg.cont_batching is True
     assert "--reasoning-format" in cfg.extra_flags
     assert "deepseek" in cfg.extra_flags
-    assert "--no-context-shift" in cfg.extra_flags
+    # --no-context-shift is now a first-class field, not an unknown extra flag.
+    assert cfg.context_shift is False
+    assert "--no-context-shift" not in cfg.extra_flags
     assert "-n" in cfg.extra_flags
 
     rebuilt = to_argv(cfg, binary="/home/user/llama.cpp/build/bin/llama-server")
     for needle in ["--model", "--mmproj", "--port", "8080", "--jinja", "--metrics", "--flash-attn", "on", "q8_0", "--parallel", "6"]:
         assert needle in rebuilt
+    assert "--no-context-shift" in rebuilt
 
 
 def test_short_flag_aliases():
@@ -147,3 +150,34 @@ def test_fractional_draft_min_is_rejected_not_truncated():
         _reject_bad_speculation(
             LlamaServerConfig(name="x", spec_type="draft-mtp", draft_max=2, draft_min=0.7)
         )
+
+
+def test_cache_reuse_fields_roundtrip():
+    """The prompt-processing / KV-cache reuse knobs as first-class fields."""
+    from lld.settings import LlamaServerConfig
+
+    cfg = LlamaServerConfig(
+        name="cached", model_path="/m.gguf",
+        cache_reuse=256, cache_idle_slots=True, context_shift=False, kv_offload=True,
+    )
+    argv = to_argv(cfg, "llama-server")
+    assert "--cache-reuse" in argv and argv[argv.index("--cache-reuse") + 1] == "256"
+    assert "--cache-idle-slots" in argv
+    assert "--no-context-shift" in argv
+    assert "--kv-offload" in argv
+
+    back = from_argv(argv)
+    assert back.cache_reuse == 256
+    assert back.cache_idle_slots is True
+    assert back.context_shift is False
+    assert back.kv_offload is True
+
+
+def test_cache_toggles_default_to_nothing():
+    """None on all four means emit nothing — untouched presets stay untouched."""
+    from lld.settings import LlamaServerConfig
+
+    argv = to_argv(LlamaServerConfig(name="plain", model_path="/m.gguf"), "llama-server")
+    for flag in ("--cache-reuse", "--cache-idle-slots", "--no-cache-idle-slots",
+                 "--context-shift", "--no-context-shift", "--kv-offload", "--no-kv-offload"):
+        assert flag not in argv, flag

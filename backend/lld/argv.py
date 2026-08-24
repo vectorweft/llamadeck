@@ -44,6 +44,7 @@ _FIELD_FLAGS: list[tuple[str, str, str]] = [
     ("flash_attn", "--flash-attn", "value"),
     ("cache_type_k", "--cache-type-k", "value"),
     ("cache_type_v", "--cache-type-v", "value"),
+    ("cache_reuse", "--cache-reuse", "value"),
     ("temperature", "--temp", "value"),
     ("top_k", "--top-k", "value"),
     ("top_p", "--top-p", "value"),
@@ -135,6 +136,21 @@ def to_argv(cfg: LlamaServerConfig, binary: str) -> list[str]:
     if cfg.slots:
         argv.append("--slots")
 
+    # Prompt-processing / KV-cache reuse toggles: True → positive flag,
+    # False → --no-<flag>, None → leave llama.cpp's default (emit nothing).
+    # `cache_reuse` is a value flag (`--cache-reuse N`) and comes from
+    # _FIELD_FLAGS above.
+    for _field, _pos, _neg in (
+        ("cache_idle_slots", "--cache-idle-slots", "--no-cache-idle-slots"),
+        ("context_shift", "--context-shift", "--no-context-shift"),
+        ("kv_offload", "--kv-offload", "--no-kv-offload"),
+    ):
+        _v = getattr(cfg, _field)
+        if _v is True:
+            argv.append(_pos)
+        elif _v is False:
+            argv.append(_neg)
+
     argv.extend(cfg.extra_flags)
     return argv
 
@@ -198,6 +214,7 @@ _FLAG_ALIASES = {
     "--flash-attn": {"-fa"},
     "--cache-type-k": {"-ctk"},
     "--cache-type-v": {"-ctv"},
+    "--cache-reuse": set(),
     "--temp": {"--temperature"},
     "--top-k": set(),
     "--top-p": set(),
@@ -340,6 +357,24 @@ def from_argv(cmdline: list[str], name: str = "adopted") -> LlamaServerConfig:
             cfg.slots = True
             i += 1
             continue
+        # Prompt-processing / KV-cache reuse toggles (see to_argv's emission).
+        _toggle_seen = False
+        for _field, _pos, _neg in (
+            ("cache_idle_slots", "--cache-idle-slots", "--no-cache-idle-slots"),
+            ("context_shift", "--context-shift", "--no-context-shift"),
+            ("kv_offload", "--kv-offload", "--no-kv-offload"),
+        ):
+            if tok == _pos:
+                setattr(cfg, _field, True)
+                _toggle_seen = True
+                break
+            if tok == _neg:
+                setattr(cfg, _field, False)
+                _toggle_seen = True
+                break
+        if _toggle_seen:
+            i += 1
+            continue
         # Unknown — keep verbatim (plus its value if the next token doesn't look like a flag)
         extra.append(tok)
         i += 1
@@ -352,7 +387,7 @@ def from_argv(cmdline: list[str], name: str = "adopted") -> LlamaServerConfig:
 
 # Optional-typed fields default to None at runtime, so isinstance(current, ...)
 # can't tell us their intended type. Drive coercion off the dataclass annotations.
-_INT_FIELDS = {"draft_max", "draft_min"}
+_INT_FIELDS = {"draft_max", "draft_min", "cache_reuse"}
 # presence_penalty defaults to None, so `_assign` cannot infer "float" from the
 # current value and would store the raw string "1.5" — which then renders as a
 # perfectly valid-looking flag and only fails on the next numeric comparison.

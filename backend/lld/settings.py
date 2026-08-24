@@ -401,6 +401,17 @@ class LlamaServerConfig:
     cache_type_v: str = "f16"
     cont_batching: bool = True
 
+    # ---- prompt-processing / KV-cache reuse (llama.cpp server cache) --------
+    # None = leave llama.cpp's own default (emit nothing). Tuning these speeds
+    # up prompt processing when requests share a long prefix, or trades KV
+    # memory for speed. Exposed as first-class fields so they show up in the
+    # preset editor and are validated by the flag catalog, not buried in
+    # extra_flags.
+    cache_reuse: int | None = None          # --cache-reuse N (min chunk to reuse)
+    cache_idle_slots: bool | None = None    # --cache-idle-slots / --no-cache-idle-slots
+    context_shift: bool | None = None       # --context-shift / --no-context-shift
+    kv_offload: bool | None = None          # --kv-offload / --no-kv-offload
+
     temperature: float = 0.8
     top_k: int = 40
     top_p: float = 0.95

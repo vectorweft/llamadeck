@@ -98,6 +98,7 @@
       ctx_size: 8192, n_gpu_layers: 999, parallel: 1,
       batch_size: 2048, ubatch_size: 512, threads: -1,
       flash_attn: 'auto', cache_type_k: 'f16', cache_type_v: 'f16', cont_batching: true,
+      cache_reuse: null, cache_idle_slots: null, context_shift: null, kv_offload: null,
       temperature: 0.8, top_k: 40, top_p: 0.95, min_p: 0.05, repeat_penalty: 1.0,
       jinja: false, metrics: true, slots: true,
       spec_type: 'none', model_path_draft: null, n_gpu_layers_draft: 999, draft_max: null, draft_min: null,
@@ -1140,6 +1141,44 @@
             <span class="text-slate-400">cache_type_v</span>
             <select bind:value={editing.cache_type_v} class="mt-1 w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 font-mono">
               <option>f16</option><option>f32</option><option>bf16</option><option>q8_0</option><option>q4_0</option><option>q4_1</option><option>q5_0</option><option>q5_1</option><option>iq4_nl</option>
+            </select>
+          </label>
+          <div class="col-span-2 mt-1 border-t border-slate-800 pt-2">
+            <span class="text-xs uppercase tracking-wider text-slate-500">{t('Prompt cache / KV reuse')}</span>
+          </div>
+          <label class="block" title={t('--cache-reuse N: minimum chunk size to reuse from the KV cache via context shifting. Helps when requests share a long prompt prefix.')}>
+            <span class="text-slate-400">cache_reuse</span>
+            <input type="number" min="0" step="128"
+              value={editing.cache_reuse ?? ''}
+              oninput={(e) => { const v = (e.currentTarget as HTMLInputElement).value; editing!.cache_reuse = v === '' ? null : Number(v); }}
+              class="mt-1 w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 font-mono"
+              placeholder="e.g. 256 — null = llama.cpp default" />
+          </label>
+          <label class="block" title={t('--cache-idle-slots / --no-cache-idle-slots: keep idle slots in the prompt cache so a later task can reuse them.')}>
+            <span class="text-slate-400">cache_idle_slots</span>
+            <select
+              value={editing.cache_idle_slots == null ? 'auto' : (editing.cache_idle_slots ? 'on' : 'off')}
+              onchange={(e) => { const s = (e.currentTarget as HTMLSelectElement).value; editing!.cache_idle_slots = s === 'on' ? true : s === 'off' ? false : null; }}
+              class="mt-1 w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 font-mono">
+              <option value="auto">auto (default)</option><option value="on">on</option><option value="off">off</option>
+            </select>
+          </label>
+          <label class="block" title={t('--context-shift / --no-context-shift: shift the KV cache when the context fills, instead of re-processing.')}>
+            <span class="text-slate-400">context_shift</span>
+            <select
+              value={editing.context_shift == null ? 'auto' : (editing.context_shift ? 'on' : 'off')}
+              onchange={(e) => { const s = (e.currentTarget as HTMLSelectElement).value; editing!.context_shift = s === 'on' ? true : s === 'off' ? false : null; }}
+              class="mt-1 w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 font-mono">
+              <option value="auto">auto (default)</option><option value="on">on</option><option value="off">off</option>
+            </select>
+          </label>
+          <label class="block" title={t('--kv-offload / --no-kv-offload: if the KV cache lives in GPU memory (faster attention, more VRAM) or in system RAM (fits bigger models, slower when it crosses PCIe). Default = offloaded to the GPU.')}>
+            <span class="text-slate-400">kv_offload</span>
+            <select
+              value={editing.kv_offload == null ? 'auto' : (editing.kv_offload ? 'on' : 'off')}
+              onchange={(e) => { const s = (e.currentTarget as HTMLSelectElement).value; editing!.kv_offload = s === 'on' ? true : s === 'off' ? false : null; }}
+              class="mt-1 w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 font-mono">
+              <option value="auto">auto (default)</option><option value="on">on</option><option value="off">off</option>
             </select>
           </label>
           <label class="block col-span-2">

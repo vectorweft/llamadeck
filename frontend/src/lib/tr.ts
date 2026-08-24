@@ -571,6 +571,15 @@ export const tr: Record<string, string> = {
     'Anahtarlar için KV-cache veri tipi. f16 = tam hassasiyet; q8_0/q4_0 bir miktar kaliteden ödün vererek VRAM tasarrufu sağlar.',
   'KV-cache data type for values. f16 = full precision; q8_0/q4_0 quantize to save VRAM at some quality cost.':
     'Değerler için KV-cache veri tipi. f16 = tam hassasiyet; q8_0/q4_0 bir miktar kaliteden ödün vererek VRAM tasarrufu sağlar.',
+  'Prompt cache / KV reuse': 'Prompt cache / KV yeniden kullanımı',
+  '--cache-reuse N: minimum chunk size to reuse from the KV cache via context shifting. Helps when requests share a long prompt prefix.':
+    '--cache-reuse N: bağlam kaydırma ile KV cache\u2019den yeniden kullanılacak en küçük dilim boyutu. İstekler uzun bir prompt ön-ekini paylaştığında yardımcı olur.',
+  '--cache-idle-slots / --no-cache-idle-slots: keep idle slots in the prompt cache so a later task can reuse them.':
+    '--cache-idle-slots / --no-cache-idle-slots: boştaki slot\u2019lar prompt cache\u2019te tutulur ki sonraki bir görev onları yeniden kullanabilsin.',
+  '--context-shift / --no-context-shift: shift the KV cache when the context fills, instead of re-processing.':
+    '--context-shift / --no-context-shift: bağlam dolunca yeniden işlemek yerine KV cache\u2019i kaydırır.',
+  '--kv-offload / --no-kv-offload: if the KV cache lives in GPU memory (faster attention, more VRAM) or in system RAM (fits bigger models, slower when it crosses PCIe). Default = offloaded to the GPU.':
+    '--kv-offload / --no-kv-offload: KV cache\u2019in GPU belleğinde mi (daha hızlı attention, daha çok VRAM) yoksa sistem RAM\u2019inde mi (daha büyük model sığar ama PCIe üzerinden aktarımda yavaşlar) tutulacağı. Varsayılan = GPU\u2019ya offload.',
   'Context depth: pre-fill the KV cache with this many tokens before measuring, to test speed at longer contexts. 0 = disabled.':
     'Bağlam derinliği: ölçümden önce KV cache bu kadar token ile doldurulur; uzun bağlamlarda hızı test eder. 0 = kapalı.',
   'Repetitions per test. Results are averaged; more reps are more stable but slower.':

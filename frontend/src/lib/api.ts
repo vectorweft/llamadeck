@@ -140,6 +140,12 @@ export interface LlamaConfig {
   cache_type_k: string;
   cache_type_v: string;
   cont_batching: boolean;
+  /** Prompt-processing / KV-cache reuse knobs. null = llama.cpp's default
+   *  (emit nothing); setting them turns prompt-prefix reuse on/off. */
+  cache_reuse?: number | null;
+  cache_idle_slots?: boolean | null;
+  context_shift?: boolean | null;
+  kv_offload?: boolean | null;
   temperature: number;
   top_k: number;
   top_p: number;
