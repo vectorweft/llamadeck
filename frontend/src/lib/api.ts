@@ -670,6 +670,9 @@ export const api = {
   featureScans: (limit = 20) => req<FeatureScan[]>(`/api/features/scans?limit=${limit}`),
   featuresScanNow: () => req<FeatureScan>('/api/features/scan', { method: 'POST' }),
   featureScanRetry: (scanId: number) => req<FeatureScan>(`/api/features/scans/${scanId}/retry`, { method: 'POST' }),
+  featureScanDelete: (scanId: number) => req<{ ok: boolean }>(`/api/features/scans/${scanId}`, { method: 'DELETE' }),
+  featuresScansDelete: (status?: string) =>
+    req<{ deleted: number }>(`/api/features/scans${status ? `?status=${encodeURIComponent(status)}` : ''}`, { method: 'DELETE' }),
   featureSeen: (id: number) => req<{ ok: boolean }>(`/api/features/${id}/seen`, { method: 'POST' }),
   featuresSeenAll: () => req<{ ok: boolean }>('/api/features/seen-all', { method: 'POST' }),
   featureTry: (id: number, preset_name: string, start: boolean) =>

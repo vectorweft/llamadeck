@@ -195,6 +195,44 @@
     }
   }
 
+  async function deleteScan(id: number) {
+    const ok = await confirmDialog(
+      t('Delete this scan and its cards?'),
+      { title: t('Delete scan'), confirmLabel: t('Delete') }
+    );
+    if (!ok) return;
+    busy = `del-${id}`;
+    error = null;
+    try {
+      await api.featureScanDelete(id);
+      await refresh();
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    } finally {
+      busy = null;
+    }
+  }
+
+  async function clearFailed() {
+    const failed = scans.filter((s) => s.status === 'failed');
+    if (!failed.length) return;
+    const ok = await confirmDialog(
+      t('Clear {n} failed scan(s)? Successful cards are kept; only the entries that errored are removed.', { n: failed.length }),
+      { title: t('Clear failed scans'), confirmLabel: t('Clear') }
+    );
+    if (!ok) return;
+    busy = 'clear-failed';
+    error = null;
+    try {
+      await api.featuresScansDelete('failed');
+      await refresh();
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    } finally {
+      busy = null;
+    }
+  }
+
   async function markSeen(id: number) {
     try {
       await api.featureSeen(id);
@@ -463,6 +501,21 @@
   {:else}
 
   <!-- Scans awaiting summary / failed -->
+  {#if pendingScans.length}
+    <div class="flex items-center gap-3 pt-2">
+      <div class="h-px flex-1 bg-slate-800"></div>
+      <span class="text-xs font-mono text-slate-400">{t('{n} scan(s) awaiting summary', { n: pendingScans.length })}</span>
+      <div class="h-px flex-1 bg-slate-800"></div>
+      {#if scans.some((s) => s.status === 'failed')}
+        <button
+          onclick={clearFailed}
+          disabled={busy != null}
+          class="shrink-0 rounded border border-rose-900/70 bg-rose-950/30 px-3 py-1 text-xs text-rose-300 hover:bg-rose-950/50 disabled:opacity-40"
+          title={t('Remove the failed scans')}
+        >{busy === 'clear-failed' ? t('Clearing…') : t('Clear failed')}</button>
+      {/if}
+    </div>
+  {/if}
   {#each pendingScans as scan (scan.id)}
     {@const phase = scanPhase(scan)}
     <section class="rounded-lg border p-4 space-y-2 {phase === 'failed' ? 'border-rose-800 bg-rose-950/20' : phase === 'blocked' ? 'border-amber-800 bg-amber-950/20' : 'border-sky-800 bg-sky-950/20'}">
@@ -489,11 +542,19 @@
       {:else}
         <div class="flex items-center gap-3 flex-wrap text-sm {phase === 'failed' ? 'text-rose-200' : 'text-amber-200'}">
           <span>{phase === 'failed' ? t('Summarization failed.') : t('Waiting for an AI provider to summarize.')}</span>
-          <button
-            onclick={() => retryScan(scan.id)}
-            disabled={busy != null}
-            class="ml-auto rounded bg-slate-700/40 border border-slate-600 px-3 py-1 text-xs hover:bg-slate-700/60 disabled:opacity-40"
-          >{busy === `retry-${scan.id}` ? t('Summarizing…') : t('Retry summary')}</button>
+          <div class="ml-auto flex items-center gap-2">
+            <button
+              onclick={() => retryScan(scan.id)}
+              disabled={busy != null}
+              class="rounded bg-slate-700/40 border border-slate-600 px-3 py-1 text-xs hover:bg-slate-700/60 disabled:opacity-40"
+            >{busy === `retry-${scan.id}` ? t('Summarizing…') : t('Retry summary')}</button>
+            <button
+              onclick={() => deleteScan(scan.id)}
+              disabled={busy != null}
+              class="rounded border border-slate-700 px-3 py-1 text-xs text-slate-400 hover:text-rose-300 hover:bg-slate-800/60 disabled:opacity-40"
+              title={t('Delete this scan and its cards')}
+            >{busy === `del-${scan.id}` ? t('Deleting…') : t('Delete')}</button>
+          </div>
         </div>
         {#if scan.error}
           <div class="text-xs font-mono {phase === 'failed' ? 'text-rose-300' : 'text-amber-300'}">{scan.error}</div>

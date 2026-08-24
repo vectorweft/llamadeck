@@ -195,18 +195,36 @@ _PROBE_TTL = 30.0
 
 async def probe_endpoint(base: str, headers: dict | None = None,
                          timeout: float = 8.0) -> dict:
-    """Best-effort discovery of an OpenAI-compatible endpoint:
-    `{"models": [id…], "n_ctx": int|None, "native": bool}`.
+    """Best-effort discovery of an OpenAI-compatible endpoint.
+
+    Returns ``{"models": [id…], "loaded": str|None, "n_ctx": int|None,
+    "n_ctx_by_model": {id: int|None}, "native": bool, "reachable": bool}``.
 
     Never raises — an endpoint that answers none of these is simply used blind,
-    exactly as before this probe existed."""
+    exactly as before this probe existed.
+
+    A llama.cpp ROUTER answers ``/props`` with ``default_generation_settings.n_ctx
+    = 0`` (there is no single default; every served model carries its own
+    context), so ``n_ctx`` alone is useless there. The real context is the
+    ``meta.n_ctx`` of the model that will answer the request — the one whose
+    ``status.value == "loaded"``. When ``/props`` reports no usable context, we
+    fall back to the loaded model's ``meta.n_ctx`` so the adaptive prompt
+    fitting (see _summarize_openai_adaptive) still runs instead of handing a
+    too-big prompt to the server and getting a raw 400.
+    """
     base = base.rstrip("/")
     hit = _probe_cache.get(base)
     if hit and time.monotonic() - hit[0] < _PROBE_TTL:
         return hit[1]
-    info: dict = {"models": [], "n_ctx": None, "native": False, "reachable": False}
+    info: dict = {
+        "models": [], "loaded": None, "n_ctx": None, "n_ctx_by_model": {},
+        "native": False, "reachable": False,
+    }
     root = _api_root(base)
     async with httpx.AsyncClient(timeout=timeout, headers=headers or {}) as client:
+        # Model list: ids, the single loaded one, and per-model n_ctx (meta).
+        # We parse the whole list (no early break) because a router needs the
+        # loaded model's context, not just the first id.
         for url in (f"{base}/models", f"{root}/v1/models"):
             try:
                 r = await client.get(url)
@@ -215,16 +233,26 @@ async def probe_endpoint(base: str, headers: dict | None = None,
                 data = r.json()
             except Exception:
                 continue
-            ids = [
-                str(m["id"]) for m in (data.get("data") or [])
-                if isinstance(m, dict) and m.get("id")
-            ] or [
-                str(m["name"]) for m in (data.get("models") or [])
-                if isinstance(m, dict) and m.get("name")
-            ]
-            info["reachable"] = True
-            if ids:
-                info["models"] = ids
+            entries = (data.get("data") or []) if isinstance(data, dict) else []
+            if entries:
+                loaded_ids: list[str] = []
+                for m in entries:
+                    if not isinstance(m, dict):
+                        continue
+                    mid = m.get("id") or m.get("name")
+                    if not mid:
+                        continue
+                    mid = str(mid)
+                    info["models"].append(mid)
+                    meta = m.get("meta") or {}
+                    n_ctx = meta.get("n_ctx")
+                    if isinstance(n_ctx, int) and n_ctx > 0:
+                        info["n_ctx_by_model"][mid] = n_ctx
+                    if (m.get("status") or {}).get("value") == "loaded":
+                        loaded_ids.append(mid)
+                if len(loaded_ids) == 1:
+                    info["loaded"] = loaded_ids[0]
+                info["reachable"] = True
                 break
         try:
             r = await client.get(f"{root}/props")
@@ -238,8 +266,39 @@ async def probe_endpoint(base: str, headers: dict | None = None,
                     info["n_ctx"] = n_ctx
         except Exception:
             pass
+
+        # A router reports n_ctx 0 in /props; use the loaded model's context so
+        # the prompt fit check is not silently skipped (which is what turned a
+        # too-small model into a raw 400).
+        if not info["n_ctx"]:
+            ctxs = [
+                n for m in (info["models"] if info["loaded"] is None else [info["loaded"]])
+                if (n := info["n_ctx_by_model"].get(m))
+            ]
+            if ctxs:
+                info["n_ctx"] = max(ctxs)
+
     _probe_cache[base] = (time.monotonic(), info)
     return info
+
+
+def select_model(configured: str, info: dict) -> str:
+    """The model id to send as ``model``, given a probe result.
+
+    An explicit ``configured`` name wins (via resolve_model_id, which matches
+    the id the endpoint actually serves). With an empty ``configured`` and a
+    router serving more than one model, prefer the single LOADED model — that
+    is the one the user is already running, and the only sane automatic answer
+    when the endpoint serves a whole catalog. Only when there is no loaded
+    model do we fall back to "pick one" (or a lone served model).
+    """
+    configured = (configured or "").strip()
+    if configured:
+        return resolve_model_id(configured, info["models"])
+    loaded = info.get("loaded")
+    if loaded and len(info["models"]) > 1:
+        return loaded
+    return resolve_model_id("", info["models"])
 
 
 async def count_tokens(text: str, base: str, headers: dict | None = None,
@@ -981,7 +1040,7 @@ Cluster related flags and commits into meaningful FEATURES and produce one card 
         rather than surfacing as a raw 400."""
         base, configured, headers = self._openai_conf()
         info = await probe_endpoint(base, headers)
-        model = resolve_model_id(configured, info["models"])
+        model = select_model(configured, info)
 
         max_tokens = _MAX_COMPLETION
         n_ctx = info["n_ctx"]
@@ -1020,7 +1079,7 @@ Cluster related flags and commits into meaningful FEATURES and produce one card 
                     reprobed = True
                     _probe_cache.pop(base, None)
                     info = await probe_endpoint(base, headers)
-                    payload["model"] = resolve_model_id(configured, info["models"])
+                    payload["model"] = select_model(configured, info)
                     log.warning("features: endpoint rejected the model id, re-probed")
                     continue
                 if r.status_code == 400:
@@ -1281,6 +1340,40 @@ Cluster related flags and commits into meaningful FEATURES and produce one card 
             )
             await db.execute("UPDATE feature_scans SET seen=1 WHERE seen=0")
             await db.commit()
+
+    async def delete_scan(self, scan_id: int) -> bool:
+        """Delete a scan and everything it owns (its cards, and any A/B runs
+        that reference those cards). Used to clear the pile of failed/pending
+        scans; a scan that already produced cards is dragged out whole."""
+        async with connect() as db:
+            card_ids = [
+                row["id"]
+                for row in await (await db.execute(
+                    "SELECT id FROM release_features WHERE scan_id=?", (scan_id,)
+                )).fetchall()
+            ]
+            if card_ids:
+                qmarks = ",".join("?" * len(card_ids))
+                await db.execute(
+                    f"DELETE FROM feature_ab_runs WHERE feature_id IN ({qmarks})",
+                    card_ids,
+                )
+                await db.execute(
+                    "DELETE FROM release_features WHERE scan_id=?", (scan_id,)
+                )
+            await db.execute("DELETE FROM feature_scans WHERE id=?", (scan_id,))
+            await db.commit()
+        return True
+
+    async def delete_scans(self, status: str | None = None) -> int:
+        """Delete scans matching `status` (or all of them). Returns count."""
+        scans = await self.list_scans(limit=10000)
+        ids = [s["id"] for s in scans if status is None or s["status"] == status]
+        n = 0
+        for sid in ids:
+            if await self.delete_scan(sid):
+                n += 1
+        return n
 
     async def get_card(self, feature_id: int) -> dict | None:
         async with connect() as db:

@@ -1,0 +1,1 @@
+import{w as t}from"./DYmZNX10.js";import{t as a}from"./B4UKYUIg.js";const o=t(null);function c(r,e={}){return new Promise(n=>o.set({message:r,...e,resolve:n}))}function m(r,e={}){return new Promise(n=>o.set({message:r,confirmLabel:a("OK"),...e,cancelLabel:null,resolve:n}))}export{m as a,o as b,c};

@@ -11,7 +11,7 @@ from ..features import (
     FeatureError,
     get_feature_tracker,
     probe_endpoint,
-    resolve_model_id,
+    select_model,
     summary_status,
 )
 from ..flag_catalog import classify_flags
@@ -160,7 +160,7 @@ async def probe_llm_endpoint(body: ProbeBody) -> dict:
         out["detail"] = f"nothing answered at {base} — is the server running?"
         return out
     try:
-        out["resolved"] = resolve_model_id((s.llm_model or "").strip(), info["models"])
+        out["resolved"] = select_model((s.llm_model or "").strip(), info)
     except FeatureError as e:
         out["detail"] = str(e)
     return out
@@ -205,6 +205,25 @@ async def retry_scan(scan_id: int) -> dict:
         return await get_feature_tracker().summarize_scan(scan_id)
     except FeatureError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.delete("/scans/{scan_id}")
+async def delete_scan(scan_id: int) -> dict:
+    """Delete a scan and its cards, so a pile of failed/pending scans (the
+    usual aftermath of a local model that was too small, or an endpoint that
+    was mid-change) can actually be cleared instead of accumulating forever."""
+    ok = await get_feature_tracker().delete_scan(scan_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="scan not found")
+    return {"ok": True}
+
+
+@router.delete("/scans")
+async def delete_scans(status: str | None = None) -> dict:
+    """Bulk-delete scans, optionally only those in a given `status`
+    (e.g. `?status=failed`). The frontend's "clear failed" uses this."""
+    n = await get_feature_tracker().delete_scans(status=status)
+    return {"deleted": n}
 
 
 @router.post("/seen-all")
