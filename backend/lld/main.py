@@ -122,12 +122,35 @@ async def _probe_vram_budget(broker) -> None:
     )
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
+def configure_logging() -> None:
+    """App-level logging: LlamaDeck logs at INFO, httpx transports stay quiet.
+
+    Raising the ROOT logger to INFO (which `basicConfig` does here) makes every
+    defaulting child logger inherit INFO too. httpx's own 'httpx'/'httpcore'
+    loggers default to NOTSET, so under a root-INFO config they log EVERY HTTP
+    request at INFO via `_client.py`:
+      - the metrics poller (2 Hz) does GET /models + /slots + /metrics for each
+        running preset,
+      - the health watchdog and GPU probe shell out through httpx as well.
+    With a preset up — and on a fresh install where the seeded router auto-starts
+    at boot with no model loaded — the terminal scrolls
+    "HTTP Request: GET http://127.0.0.1:8085/models" several times a second,
+    which reads as the app stuck in an infinite loop hunting for a loaded model.
+    Silence the httpx transports (level WARNING still surfaces real transport
+    errors); LlamaDeck's own INFO lines are unaffected because they use the
+    `lld` logger.
+    """
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s :: %(message)s",
     )
+    for _transport_logger in ("httpx", "httpcore"):
+        logging.getLogger(_transport_logger).setLevel(logging.WARNING)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    configure_logging()
     boot = BootTimer()
     await init_db()
     await vram_calib.load()
