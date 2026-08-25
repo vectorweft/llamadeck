@@ -203,6 +203,19 @@ def _default_rpc_bin() -> str:
     return shutil.which("ggml-rpc-server") or ""
 
 
+def factory_models_root() -> str:
+    """The models root a never-configured install starts with.
+
+    Named rather than inlined because three call sites need to recognise it as
+    "the user has not chosen a models folder yet": the wizard drops it from the
+    scan roots once a real one is picked, the seeded router preset is repointed
+    off it, and boot refuses to auto-start a router still sitting on it. It is
+    the one models path that may be changed out from under the user without
+    overriding a decision, because no decision was ever made.
+    """
+    return str(Path.home() / "llama.cpp" / "models")
+
+
 class RpcServerConfig(BaseModel):
     """One `ggml-rpc-server` LlamaDeck starts and stops.
 
@@ -243,10 +256,8 @@ class Settings(BaseModel):
     # and a box whose single binary already covers its GPUs needs none of it.
     rpc_servers: list[RpcServerConfig] = Field(default_factory=list)
 
-    scan_roots: list[str] = Field(
-        default_factory=lambda: [str(Path.home() / "llama.cpp" / "models")]
-    )
-    hf_models_root: str = Field(default_factory=lambda: str(Path.home() / "llama.cpp" / "models"))
+    scan_roots: list[str] = Field(default_factory=lambda: [factory_models_root()])
+    hf_models_root: str = Field(default_factory=factory_models_root)
     hf_token: str | None = None
     # UI language ("en" | "tr"). Mirrors the header toggle (localStorage is the
     # frontend's source of truth); the backend uses it for generated content —

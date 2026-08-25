@@ -131,15 +131,24 @@ def default_seeds() -> list[LlamaServerConfig]:
     # llama-server's --models-dir only scans one level deep; deeper model
     # trees rely on the INI exclusively. The INI is auto-(re)generated from
     # sibling single-mode presets on startup and via POST /api/router/ini/write.
-    from .settings import STATE_DIR as _STATE_DIR, load_settings as _load_settings
+    from .settings import (
+        STATE_DIR as _STATE_DIR,
+        factory_models_root as _factory_models_root,
+        load_settings as _load_settings,
+    )
     # The models root the user actually configured — NOT the factory default.
     # Baking Path.home()/"llama.cpp"/"models" in here seeded a router preset
     # pointing at a directory that does not exist on any box whose models live
     # elsewhere, and llama-server exits 1 on a missing --models-dir.
+    #
+    # On a genuinely fresh box this still lands on the factory default, because
+    # that is all settings knows yet. Two things keep that from biting: the
+    # wizard repoints this preset when the real root is chosen, and boot skips
+    # auto-starting a router still on the factory value.
     try:
         _models_root = _load_settings().hf_models_root
     except Exception:  # settings unreadable on a truly fresh box
-        _models_root = str(Path.home() / "llama.cpp" / "models")
+        _models_root = _factory_models_root()
     router_default = LlamaServerConfig(
         name="router-8085",
         mode="router",

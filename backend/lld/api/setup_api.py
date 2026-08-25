@@ -24,7 +24,7 @@ from .. import accel, models
 from ..build import LLAMA_CPP_URL, BuildError, get_build_manager
 from ..presets import PresetRegistry
 from ..procutil import run_capture
-from ..settings import load_settings, save_settings
+from ..settings import factory_models_root, load_settings, save_settings
 
 log = logging.getLogger(__name__)
 
@@ -282,6 +282,30 @@ class ModelsRootBody(BaseModel):
     create: bool = False
 
 
+def _repoint_factory_routers(new_root: str, factory_default: str) -> list[str]:
+    """Move router presets off the untouched factory models root. Returns the
+    names moved. Best-effort: failing to rewrite a preset must not fail the
+    wizard step that was really about settings."""
+    if new_root == factory_default:
+        return []
+    moved: list[str] = []
+    try:
+        registry = PresetRegistry()
+        for cfg in registry.list():
+            if (cfg.mode or "single") != "router":
+                continue
+            if cfg.models_dir != factory_default:
+                continue
+            cfg.models_dir = new_root
+            registry.upsert(cfg)
+            moved.append(cfg.name)
+    except Exception as e:
+        log.warning("could not repoint router presets at %s: %s", new_root, e)
+    if moved:
+        log.info("repointed router preset(s) %s at %s", ", ".join(moved), new_root)
+    return moved
+
+
 @router.post("/models-root")
 async def set_models_root(body: ModelsRootBody) -> dict:
     """Set where GGUFs live. Also becomes a scan root, because a models
@@ -307,13 +331,27 @@ async def set_models_root(body: ModelsRootBody) -> dict:
     # not a user choice, and leaving it behind means a warning on every scan
     # forever. Any other missing root is left alone — it may be a USB disk
     # that is simply not plugged in right now.
-    factory_default = str(Path.home() / "llama.cpp" / "models")
+    factory_default = factory_models_root()
     if factory_default != str(path) and not Path(factory_default).exists():
         s.scan_roots = [r for r in s.scan_roots if r != factory_default]
     save_settings(s)
 
+    # Same reasoning, applied to the seeded router preset: it was created
+    # before the user had picked anything, so its models_dir is the factory
+    # default too. Left behind, the wizard finishes green while every
+    # subsequent boot logs "auto-start of router preset failed: models_dir
+    # does not exist" against a path the line above just declared not a user
+    # choice. Only presets still sitting on that value are moved — a
+    # models_dir the user actually edited is a decision and stays put.
+    repointed = _repoint_factory_routers(str(path), factory_default)
+
     scan = await models.full_rescan(s.scan_roots)
-    return {"hf_models_root": s.hf_models_root, "scan_roots": s.scan_roots, "scan": scan}
+    return {
+        "hf_models_root": s.hf_models_root,
+        "scan_roots": s.scan_roots,
+        "scan": scan,
+        "repointed_routers": repointed,
+    }
 
 
 @router.post("/rescan")

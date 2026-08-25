@@ -43,7 +43,7 @@ from .processes import LlmService
 from .processes.comfyui import ComfyService
 from .processes.tts import TtsService
 from .router_ini import write_ini
-from .settings import LOGS_DIR, STATE_DIR, load_settings
+from .settings import LOGS_DIR, STATE_DIR, factory_models_root, load_settings
 from .supervisor import get_supervisor
 from .rpc_server import get_rpc_manager
 from .vram import offload_gpus, probe_gpus
@@ -122,6 +122,46 @@ async def _probe_vram_budget(broker) -> None:
     )
 
 
+#: Endpoints the open dashboard polls on a timer. Together they are ~1 access
+#: log line per second, forever, from the app talking to itself — the same
+#: "stuck in a loop" reading the httpx logs gave, just slower. Prefix match, so
+#: per-preset paths like /api/server/status/<name> are covered by their parent.
+_HEARTBEAT_PATHS = (
+    "/health",
+    "/api/server/vram",
+    "/api/server/statuses",
+    "/api/server/status/",
+    "/api/setup/state",
+    "/api/features/unseen-count",
+    "/api/hf/jobs",
+)
+
+
+class _HeartbeatAccessFilter(logging.Filter):
+    """Drop successful UI-heartbeat requests from the uvicorn access log.
+
+    Only 2xx/3xx are dropped: a heartbeat that starts failing is exactly when
+    its access line is worth seeing, and every other route still logs normally,
+    so the access log remains useful for tracing what a client actually did.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        # uvicorn.access formats (client, method, path, http_version, status).
+        # Anything else is not the record we mean to touch — let it through.
+        if not isinstance(args, tuple) or len(args) < 5:
+            return True
+        path, status = args[2], args[4]
+        if not isinstance(path, str):
+            return True
+        try:
+            if int(status) >= 400:
+                return True
+        except (TypeError, ValueError):
+            return True
+        return not path.startswith(_HEARTBEAT_PATHS)
+
+
 def configure_logging() -> None:
     """App-level logging: LlamaDeck logs at INFO, httpx transports stay quiet.
 
@@ -139,6 +179,11 @@ def configure_logging() -> None:
     Silence the httpx transports (level WARNING still surfaces real transport
     errors); LlamaDeck's own INFO lines are unaffected because they use the
     `lld` logger.
+
+    The same treatment on the way in: uvicorn's access log is left on, but the
+    dashboard's own timer polls are filtered out of it (see
+    `_HeartbeatAccessFilter`), so what scrolls past is traffic somebody caused
+    rather than the UI checking its own vitals.
     """
     logging.basicConfig(
         level=logging.INFO,
@@ -146,6 +191,7 @@ def configure_logging() -> None:
     )
     for _transport_logger in ("httpx", "httpcore"):
         logging.getLogger(_transport_logger).setLevel(logging.WARNING)
+    logging.getLogger("uvicorn.access").addFilter(_HeartbeatAccessFilter())
 
 
 @asynccontextmanager
@@ -346,11 +392,28 @@ async def lifespan(app: FastAPI):
             "at %s — open the dashboard and run the setup wizard", s.llama_bin,
         )
     else:
+        factory_root = factory_models_root()
         for cfg in PresetRegistry().list():
             if getattr(cfg, "mode", "single") != "router":
                 continue
             if boot_statuses.get(cfg.name, {}).get("running"):
                 continue  # adopted from a prior session
+            # The seeded router still points at the factory models root, so the
+            # user has not been through the wizard yet. Starting it is wrong
+            # either way: if that path is missing this raises and every boot
+            # ends in an ERROR for a preset nobody created, and if it happens to
+            # exist — a source checkout at ~/llama.cpp ships a models/ dir full
+            # of ggml-vocab test stubs — the router comes up serving those. Same
+            # reasoning as the missing-binary branch above: say what to do and
+            # stay out of the way. Once the wizard sets a real models root it
+            # repoints this preset, and the next boot starts it normally.
+            if cfg.models_dir == factory_root:
+                log.info(
+                    "skipping router preset '%s' auto-start: models directory is "
+                    "still the default %s — run the setup wizard, or point the "
+                    "preset at your GGUF root", cfg.name, factory_root,
+                )
+                continue
             try:
                 await sup.start(cfg.name)
                 log.info("auto-started router preset '%s' at boot", cfg.name)

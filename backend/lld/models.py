@@ -12,6 +12,7 @@ from pathlib import Path
 import aiosqlite
 
 from .db import connect
+from .settings import factory_models_root
 from .vram_estimate import split_shards
 
 log = logging.getLogger(__name__)
@@ -166,7 +167,15 @@ def scan_roots(roots: list[str]) -> list[ModelEntry]:
     for root_str in roots:
         root = Path(root_str)
         if not root.exists():
-            log.warning("scan root does not exist: %s", root)
+            # A root the user picked and that has gone missing is worth a
+            # warning — an unplugged USB disk is exactly the case. The untouched
+            # factory default is not: on a fresh install it is the only root
+            # there is, so a first boot greets the user with a warning about a
+            # directory they never chose, twice, before they have done anything.
+            if root_str == factory_models_root():
+                log.debug("scan root does not exist (factory default): %s", root)
+            else:
+                log.warning("scan root does not exist: %s", root)
             continue
         for p in _walk_ggufs(root):
             try:
