@@ -181,3 +181,18 @@ def test_cache_toggles_default_to_nothing():
     for flag in ("--cache-reuse", "--cache-idle-slots", "--no-cache-idle-slots",
                  "--context-shift", "--no-context-shift", "--kv-offload", "--no-kv-offload"):
         assert flag not in argv, flag
+
+
+def test_short_spellings_of_the_kv_offload_toggle_are_adopted():
+    """A server adopted from a hand-written command line is as likely to say
+    -nkvo as --no-kv-offload; llama-server treats them as one option. Missing
+    the short form dropped it into extra_flags, where the preset editor cannot
+    show it and the field reads as unset."""
+    assert from_argv(["llama-server", "-nkvo"]).kv_offload is False
+    assert from_argv(["llama-server", "-kvo"]).kv_offload is True
+    assert from_argv(["llama-server", "-nkvo"]).extra_flags == []
+
+
+def test_an_adopted_short_toggle_re_emits_as_the_long_flag():
+    cfg = from_argv(["llama-server", "-nkvo"])
+    assert "--no-kv-offload" in to_argv(cfg, "llama-server")

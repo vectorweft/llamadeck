@@ -67,6 +67,18 @@ _FIELD_FLAGS: list[tuple[str, str, str]] = [
     ("draft_min", "--spec-draft-n-min", "value"),
 ]
 
+# Tri-state toggles: True -> the positive flag, False -> the --no- form,
+# None -> emit nothing and leave llama.cpp's own default alone. Kept out of
+# _FIELD_FLAGS because that table renders one spelling per field, and these
+# have two. The alias sets are the short spellings llama-server accepts, which
+# matter for from_argv: a server adopted from a command line that says -nkvo
+# should come back as kv_offload=False, not as an opaque extra flag.
+_TOGGLE_FLAGS: list[tuple[str, str, str, set[str], set[str]]] = [
+    ("cache_idle_slots", "--cache-idle-slots", "--no-cache-idle-slots", set(), set()),
+    ("context_shift", "--context-shift", "--no-context-shift", set(), set()),
+    ("kv_offload", "--kv-offload", "--no-kv-offload", {"-kvo"}, {"-nkvo"}),
+]
+
 
 def to_argv(cfg: LlamaServerConfig, binary: str) -> list[str]:
     # A raw command wins over every field, in every mode. This is the whole
@@ -136,15 +148,10 @@ def to_argv(cfg: LlamaServerConfig, binary: str) -> list[str]:
     if cfg.slots:
         argv.append("--slots")
 
-    # Prompt-processing / KV-cache reuse toggles: True → positive flag,
-    # False → --no-<flag>, None → leave llama.cpp's default (emit nothing).
+    # Prompt-processing / KV-cache reuse toggles (see _TOGGLE_FLAGS).
     # `cache_reuse` is a value flag (`--cache-reuse N`) and comes from
     # _FIELD_FLAGS above.
-    for _field, _pos, _neg in (
-        ("cache_idle_slots", "--cache-idle-slots", "--no-cache-idle-slots"),
-        ("context_shift", "--context-shift", "--no-context-shift"),
-        ("kv_offload", "--kv-offload", "--no-kv-offload"),
-    ):
+    for _field, _pos, _neg, *_ in _TOGGLE_FLAGS:
         _v = getattr(cfg, _field)
         if _v is True:
             argv.append(_pos)
@@ -359,16 +366,12 @@ def from_argv(cmdline: list[str], name: str = "adopted") -> LlamaServerConfig:
             continue
         # Prompt-processing / KV-cache reuse toggles (see to_argv's emission).
         _toggle_seen = False
-        for _field, _pos, _neg in (
-            ("cache_idle_slots", "--cache-idle-slots", "--no-cache-idle-slots"),
-            ("context_shift", "--context-shift", "--no-context-shift"),
-            ("kv_offload", "--kv-offload", "--no-kv-offload"),
-        ):
-            if tok == _pos:
+        for _field, _pos, _neg, _pos_alias, _neg_alias in _TOGGLE_FLAGS:
+            if tok == _pos or tok in _pos_alias:
                 setattr(cfg, _field, True)
                 _toggle_seen = True
                 break
-            if tok == _neg:
+            if tok == _neg or tok in _neg_alias:
                 setattr(cfg, _field, False)
                 _toggle_seen = True
                 break
