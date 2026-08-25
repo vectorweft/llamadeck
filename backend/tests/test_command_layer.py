@@ -643,8 +643,12 @@ def test_an_explicit_mtmd_backend_device_wins_over_the_derived_one():
 def test_no_mtmd_backend_device_without_mmproj_or_a_device_pin():
     from lld.supervisor import ProcessHandle
 
-    # No projector → nothing to pin.
-    assert ProcessHandle("p", _preset(devices=["Vulkan1"]), BIN)._spawn_env() is None
+    # No projector → nothing to pin. (The env itself is no longer None here:
+    # a non-CUDA device pin now also hides the CUDA devices — see
+    # test_a_preset_pinned_off_cuda_hides_the_cuda_devices.)
+    assert "MTMD_BACKEND_DEVICE" not in ProcessHandle(
+        "p", _preset(devices=["Vulkan1"]), BIN
+    )._spawn_env()
     # Projector but no pin → "let llama.cpp choose" stays untouched.
     assert ProcessHandle(
         "p", _preset(mmproj_path="/ml/models/mmproj-BF16.gguf"), BIN
@@ -788,3 +792,74 @@ def test_a_dash_number_inside_a_placeholder_is_not_read_as_a_spelling():
 """)
     assert cat.get("--range").names == ["--range"]
     assert cat.get("--range").placeholder == "LO,-1"
+
+
+# ── a preset pinned off CUDA should not touch the CUDA card at all ─────────
+# Measured 2026-08-25: a 27B pinned to `--device Vulkan1` (R9700) still held
+# 498 MiB on the RTX 5090, listed by nvidia-smi as a compute app — a CUDA
+# primary context created by the free-VRAM query llama.cpp runs when it weighs
+# whether the model fits. Not one tensor lived there. A 2.6B with identical
+# flags never triggered it.
+
+def test_a_preset_pinned_off_cuda_hides_the_cuda_devices():
+    from lld.supervisor import ProcessHandle
+
+    env = ProcessHandle("ornith-r9700", _preset(devices=["Vulkan1"]), BIN)._spawn_env()
+    assert env["CUDA_VISIBLE_DEVICES"] == ""
+    assert "PATH" in env          # inherited, not replaced
+
+
+def test_a_cuda_pinned_preset_keeps_its_devices():
+    from lld.supervisor import ProcessHandle
+
+    assert ProcessHandle(
+        "p", _preset(devices=["CUDA0"]), BIN
+    )._spawn_env() is None
+
+
+def test_an_unpinned_preset_is_left_alone():
+    """No pin means "let llama.cpp choose", and on this build the best device
+    is the CUDA one. Hiding it would silently move the model."""
+    from lld.supervisor import ProcessHandle
+
+    assert ProcessHandle("p", _preset(), BIN)._spawn_env() is None
+
+
+def test_cuda_named_anywhere_else_keeps_the_devices():
+    """A Vulkan pin plus a raw `-ot …=CUDA0` is a deliberate split, not a
+    preset that has finished with the CUDA card."""
+    from lld.argv import cuda_hidden_env
+
+    assert cuda_hidden_env(_preset(
+        devices=["Vulkan1"], extra_flags=["-ot", "ffn.*exps=CUDA0"],
+    )) == {}
+    assert cuda_hidden_env(_preset(
+        devices=["Vulkan1"], env={"MTMD_BACKEND_DEVICE": "CUDA0"},
+    )) == {}
+
+
+def test_a_raw_command_override_is_never_second_guessed():
+    """Layer 3 is the process verbatim; its device choices are not visible in
+    `devices`, so hiding CUDA behind its back could move the model."""
+    from lld.argv import cuda_hidden_env
+
+    assert cuda_hidden_env(_preset(
+        devices=["Vulkan1"], argv_override="llama-server -m x.gguf --device CUDA0",
+    )) == {}
+
+
+def test_an_explicit_cuda_visible_devices_wins():
+    from lld.supervisor import ProcessHandle
+
+    env = ProcessHandle("p", _preset(
+        devices=["Vulkan1"], env={"CUDA_VISIBLE_DEVICES": "0"},
+    ), BIN)._spawn_env()
+    assert env["CUDA_VISIBLE_DEVICES"] == "0"
+
+
+def test_the_router_never_hides_cuda_for_one_of_its_models():
+    """The router loads every model it serves inside its own process, so one
+    preset's pin would push all the others off CUDA too."""
+    from lld.argv import cuda_hidden_env
+
+    assert cuda_hidden_env(_preset(mode="router", devices=["Vulkan1"])) == {}

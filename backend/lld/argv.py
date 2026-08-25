@@ -524,6 +524,62 @@ def mmproj_backend_env(cfg: LlamaServerConfig) -> dict[str, str]:
     return {_MTMD_BACKEND_DEVICE: devices[0]}
 
 
+_CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
+
+
+def cuda_hidden_env(cfg: LlamaServerConfig) -> dict[str, str]:
+    """`CUDA_VISIBLE_DEVICES=""` for a preset pinned entirely off the CUDA GPUs.
+
+    Measured on this box (2026-08-25): a 27B model pinned to `--device Vulkan1`
+    (the R9700) still parked **498 MiB on the RTX 5090**, and nvidia-smi listed
+    it as a compute app — a CUDA primary context, not a Vulkan allocation. The
+    binary carries both backends, so the 5090 appears twice in the device list
+    (CUDA0 *and* Vulkan2); when the model is big enough that llama.cpp has to
+    ask "does this fit", ggml_backend_cuda_get_device_memory() runs
+    cudaMemGetInfo() on the CUDA device, and that query alone creates the
+    context. Not one tensor lives there. A 2.6B model with identical flags
+    never triggers it, because nothing has to be weighed.
+
+    Hiding the CUDA devices from the process removes it (measured: 21 MiB, no
+    compute app, model still generates on the R9700 at full speed). Vulkan
+    numbering is unaffected — verified with `--list-devices`, Vulkan0/1/2 keep
+    their indices with CUDA hidden — so an existing `--device Vulkan1` pin
+    still points at the same GPU.
+
+    Deliberately narrow, because the failure mode of getting this wrong is a
+    model silently running on the wrong device:
+
+    * Only when the preset pins devices and *none* of them is a CUDA one.
+    * Never when anything else in the preset names a CUDA device — a raw
+      `-ot …=CUDA0` in extra_flags, or a pinned MTMD_BACKEND_DEVICE.
+    * Never for a raw `argv_override`: that command is the process verbatim,
+      and its device choices are not visible in these fields.
+    * Callers merge this *under* the preset's own `env`, so setting
+      CUDA_VISIBLE_DEVICES by hand still wins.
+
+    Router mode is refused here rather than only at the call site: the router
+    loads every model it serves inside its own process, so one preset's
+    variable would push every other model off CUDA too. mmproj_backend_env()
+    is deliberately shared by both paths, and this one must never be — the
+    guard belongs where it cannot be wired around by accident.
+    """
+    if getattr(cfg, "mode", "single") != "single":
+        return {}
+    if (getattr(cfg, "argv_override", None) or "").strip():
+        return {}
+    devices = [d for d in (getattr(cfg, "devices", None) or []) if d]
+    if not devices or "none" in devices:
+        return {}
+    named = " ".join([
+        *devices,
+        *(getattr(cfg, "extra_flags", None) or []),
+        str((getattr(cfg, "env", None) or {}).get(_MTMD_BACKEND_DEVICE, "")),
+    ])
+    if "CUDA" in named.upper():
+        return {}
+    return {_CUDA_VISIBLE_DEVICES: ""}
+
+
 def _is_number(tok: str) -> bool:
     """`-1` is a value, not a flag — it belongs on its flag's line."""
     try:

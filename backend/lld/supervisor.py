@@ -17,7 +17,7 @@ from typing import AsyncIterator
 
 import psutil
 
-from .argv import from_argv, mmproj_backend_env, to_argv
+from .argv import cuda_hidden_env, from_argv, mmproj_backend_env, to_argv
 from .devices import probe_devices, unknown_device_ids
 from .flag_catalog import flags_missing_values, get_flag_catalog
 from .rpc_server import RpcServerError, get_rpc_manager, needs_rpc_for
@@ -372,6 +372,12 @@ class ProcessHandle:
             # keeps every part of the model on that device. setdefault → the
             # preset's own explicit env wins.
             for k, v in mmproj_backend_env(self.cfg).items():
+                overrides.setdefault(k, v)
+            # A preset pinned to a non-CUDA GPU still pays for a CUDA context
+            # (~500 MiB on the other card) the moment llama.cpp weighs whether
+            # the model fits. Hide the CUDA devices from it. Same setdefault
+            # rule: an explicit CUDA_VISIBLE_DEVICES in the preset wins.
+            for k, v in cuda_hidden_env(self.cfg).items():
                 overrides.setdefault(k, v)
         if not overrides:
             return None
