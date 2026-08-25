@@ -983,8 +983,6 @@ export const tr: Record<string, string> = {
   'parallel jobs': 'paralel iş',
   'all cores': 'tüm çekirdekler',
   'current build: {backend}': 'mevcut derleme: {backend}',
-  'Rebuild': 'Yeniden derle',
-  'Building…': 'Derleniyor…',
   'Rebuild llama.cpp?': 'llama.cpp yeniden derlensin mi?',
   'This pulls llama.cpp and rebuilds it with {backend}. Running models keep serving from the binary already loaded in memory.':
     "llama.cpp çekilip {backend} ile yeniden derlenir. Çalışan modeller bellekteki mevcut binary'den hizmet vermeyi sürdürür.",
@@ -1009,7 +1007,6 @@ export const tr: Record<string, string> = {
   'stopped · last output still in memory; the full log is the file below':
     'durdu · son çıktı bellekte; tam kayıt aşağıdaki dosyada',
   'filter…': 'süz…',
-  'loading…': 'yükleniyor…',
   'nothing matches the filter': 'süzgece uyan bir şey yok',
   'this log is empty': 'bu kayıt boş',
   '{shown} of {total} lines': '{total} satırdan {shown} tanesi',

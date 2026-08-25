@@ -509,7 +509,14 @@ class FeatureTracker:
         bm = get_build_manager()
         v = await bm.current_version()
         if not v.commit:
-            log.warning("features: could not read binary version: %s", v.raw)
+            # No binary yet is the normal state of a fresh install, not a
+            # problem to report: boot has already said so, in a line that names
+            # the setup wizard. Repeating it as a WARNING made the first launch
+            # of a clean clone end on a yellow line about a file the user had
+            # not installed yet. A binary that *is* there and still will not
+            # answer --version is a real fault and still warns.
+            level = logging.DEBUG if not bm.llama_bin.exists() else logging.WARNING
+            log.log(level, "features: could not read binary version: %s", v.raw)
             return None
         res = await run_capture([str(bm.llama_bin), "--help"], timeout=15.0)
         if res.error or res.timed_out:
