@@ -811,6 +811,17 @@ class MultiSupervisor:
                             continue
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     pass
+                # Somebody else's llama-server. Not offered, and — because boot
+                # auto-adopts everything this returns — not taken behind their
+                # back either. An explicit adopt-by-PID still works for anyone
+                # who really means it.
+                owner = owning_llamadeck(proc)
+                if owner is not None:
+                    log.debug(
+                        "skipping PID %s: owned by another LlamaDeck (PID %s)",
+                        proc.info["pid"], owner.pid,
+                    )
+                    continue
                 cfg = from_argv(cmdline, name=f"adopted-{proc.info['pid']}")
                 matching = presets_by_port.get(cfg.port)
                 # Skip if already tracked
@@ -934,6 +945,45 @@ def get_supervisor(llama_bin: str | None = None) -> MultiSupervisor:
     return _instance
 
 
+#: Command-line shapes a LlamaDeck backend can take. Checked against the first
+#: few argv tokens only — the interpreter, the entry point, the subcommand —
+#: because a bare substring search hits any path that merely contains the name.
+def _looks_like_llamadeck(cmdline: list[str]) -> bool:
+    for token in cmdline[:3]:
+        base = os.path.basename(token)
+        if base in ("llamadeck", "lld"):          # console script, or `uv run llamadeck`
+            return True
+        if base.startswith("lld."):               # python -m lld.cli, uvicorn lld.main:app
+            return True
+    return False
+
+
+def owning_llamadeck(proc: psutil.Process) -> psutil.Process | None:
+    """The *other* LlamaDeck that spawned `proc`, if one did.
+
+    A llama-server with a live LlamaDeck parent is not up for grabs: that
+    instance is polling it, health-watchdogging it, and will stop it on request.
+    A second LlamaDeck on the same host adopted it anyway — one state dir does
+    not isolate you from another instance's processes — so both believed they
+    owned it, both polled it at 2 Hz, and either one's watchdog could restart a
+    process the other was serving from.
+
+    Our own children are not "other": their parent is this very process, and
+    adopting them back after losing track is exactly what adoption is for.
+    Children orphaned by a restart reparent to init, so they are not caught here
+    either, which is right — nobody owns them any more.
+    """
+    try:
+        parent = proc.parent()
+        if parent is None or parent.pid == os.getpid():
+            return None
+        if not parent.is_running():
+            return None
+        return parent if _looks_like_llamadeck(parent.cmdline()) else None
+    except (psutil.NoSuchProcess, psutil.AccessDenied, OSError):
+        return None
+
+
 def port_owner(port: int) -> psutil.Process | None:
     """The process listening on `port`, or None if it cannot be identified.
 
@@ -972,6 +1022,16 @@ def port_conflict_message(preset_name: str, port: int, expect_binary: str | None
         cmdline, name = [], "?"
     ours = bool(cmdline) and "llama-server" in (cmdline[0] if cmdline else "")
     if ours:
+        # Before pointing at the Adopt button: is it even adoptable? A second
+        # LlamaDeck on this host owns its own children, and the Server page no
+        # longer offers them — sending someone there would be a dead end.
+        other = owning_llamadeck(proc)
+        if other is not None:
+            return (
+                f"{preset_name}: port {port} is held by PID {proc.pid}, an llama-server "
+                f"started by another LlamaDeck (PID {other.pid}). Two instances cannot share "
+                f"a port — stop that one, or give this preset a different port."
+            )
         return (
             f"{preset_name}: port {port} is held by PID {proc.pid}, an llama-server that "
             f"LlamaDeck is not tracking — usually one that was released, or started outside "
