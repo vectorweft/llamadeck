@@ -181,3 +181,47 @@ def test_drift_is_measured_against_the_ini_the_router_was_launched_with():
     assert str(_ini_path_for({"config": {"models_preset_path": "/srv/other.ini"}})) == "/srv/other.ini"
     assert _ini_path_for({"config": {}}) == INI_PATH
     assert _ini_path_for({}) == INI_PATH
+
+
+# ---- negated flags: one setting, two spellings ------------------------------
+
+def test_a_negated_toggle_is_not_drift():
+    """LlamaDeck writes the positive INI key (`context-shift = false`) because
+    that is the form llama.cpp's preset loader maps back onto the option — but
+    the router spawns the child with `--no-context-shift`. Compared literally
+    that one setting reads as drift twice: a key the child "lacks", and a
+    child flag the INI "never set"."""
+    ini = INI + "context-shift = false\n"
+    live = [*LIVE_132K, "--no-context-shift"]
+    assert ini_drift(ini, _models(live)) == []
+
+
+def test_a_negated_toggle_that_really_disagrees_is_still_drift():
+    """Folding the spellings together must not fold away the difference: the
+    INI turned context shift off, the running child has it on."""
+    ini = INI + "context-shift = false\n"
+    live = [*LIVE_132K, "--context-shift"]
+    assert ini_drift(ini, _models(live)) == [{
+        "model": "qwen3.8-27b-R9700-vision",
+        "key": "context-shift",
+        "ini": "false",
+        "live": "true",
+    }]
+
+
+def test_cont_batching_off_was_already_reported_twice():
+    """The same fold fixes a case that predates the new fields: `cont-batching
+    = false` has always been rendered by write_ini, and the child has always
+    carried `--no-cont-batching` for it."""
+    ini = INI + "cont-batching = false\n"
+    live = [*LIVE_132K, "--no-cont-batching"]
+    assert ini_drift(ini, _models(live)) == []
+
+
+def test_a_no_prefixed_key_with_a_real_value_keeps_its_name():
+    """Only a boolean-looking value is folded. A `no-…` key carrying a real
+    value is a key in its own right and must not be rewritten into one that
+    does not exist."""
+    ini = INI + "no-op-offload = 3\n"
+    live = [*LIVE_132K, "--no-op-offload", "3"]
+    assert ini_drift(ini, _models(live)) == []

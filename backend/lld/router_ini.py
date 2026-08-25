@@ -32,6 +32,10 @@ _INI_FIELDS: list[tuple[str, str]] = [
     ("flash_attn", "flash-attn"),
     ("cache_type_k", "cache-type-k"),
     ("cache_type_v", "cache-type-v"),
+    # --cache-reuse N. None means "llama.cpp's own default", which
+    # _emit_ini_field already drops, so a preset that never sets it renders
+    # byte-identical to before.
+    ("cache_reuse", "cache-reuse"),
     ("presence_penalty", "presence-penalty"),
     # Thinking on/off, same opt-in shape as presence_penalty: the default
     # "auto" emits nothing, so a router whose presets never touch it renders
@@ -47,6 +51,34 @@ _INI_FIELDS: list[tuple[str, str]] = [
     # list and is emitted separately below.
     ("tensor_split", "tensor-split"),
 ]
+
+
+# Tri-state toggles (True / False / None). They cannot ride _INI_FIELDS: that
+# path renders the value with str(), and Python's "True"/"False" are neither
+# truthy nor falsey to llama.cpp — common_arg_utils::is_truthy/is_falsey match
+# "true"/"false"/"on"/"off"/"1"/"0" exactly, case-sensitively. A capitalised
+# "False" would sail past is_falsey(), so to_args() would keep the POSITIVE
+# flag and apply_to_params() would then read it back as false — the setting
+# inverted between the child's command line and the router's own params.
+_INI_TOGGLES: list[tuple[str, str]] = [
+    ("cache_idle_slots", "cache-idle-slots"),
+    ("context_shift", "context-shift"),
+    ("kv_offload", "kv-offload"),
+]
+
+
+def _emit_toggles(cfg, out: list[str]) -> None:
+    """Append `key = true|false` for every toggle the preset actually sets.
+
+    llama.cpp maps the INI key back onto the option and picks the negative
+    spelling itself (`context-shift = false` -> `--no-context-shift`), so we
+    only ever write the positive key.
+    """
+    for attr, key in _INI_TOGGLES:
+        val = getattr(cfg, attr, None)
+        if val is None:
+            continue
+        out.append(f"{key} = {'true' if val else 'false'}")
 
 
 def _emit_ini_field(attr: str, val) -> bool:
@@ -208,6 +240,7 @@ def render_ini(
             out.append("jinja = true")
         if not router_preset.cont_batching:
             out.append("cont-batching = false")
+        _emit_toggles(router_preset, out)
         out.append("")
 
     emitted: set[str] = set()
@@ -270,6 +303,7 @@ def render_ini(
             out.append("jinja = true")
         if not cfg.cont_batching:
             out.append("cont-batching = false")
+        _emit_toggles(cfg, out)
         for tok in _extra_pairs(cfg.extra_flags):
             out.append(tok)
         out.append("")

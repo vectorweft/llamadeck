@@ -15,7 +15,9 @@ is the router's parsed preset made visible.
 
 Comparison is deliberately literal: our INI keys are llama-server long flags
 without the dashes (`ctx-size` → `--ctx-size`), so no field mapping is needed
-and a key we have never heard of still gets compared correctly.
+and a key we have never heard of still gets compared correctly. The single
+exception is negation — see `canon` — because the two sides genuinely spell
+one setting two different ways.
 """
 from __future__ import annotations
 
@@ -24,7 +26,7 @@ from __future__ import annotations
 # router's own control flags, which llama.cpp copies from its base params into
 # every model it spawns. Comparing any of these would report drift on every
 # model forever.
-_INJECTED = {
+_INJECTED_RAW = {
     "host", "port", "alias",
     "metrics", "slots", "props", "no-webui",
     "models-dir", "models-preset", "models-max", "models-autoload",
@@ -33,6 +35,36 @@ _INJECTED = {
 
 _TRUE = {"true", "yes", "on", "1", "enabled"}
 _FALSE = {"false", "no", "off", "0", "disabled"}
+
+
+def canon(key: str, value: str) -> tuple[str, str]:
+    """Fold a negated flag onto its positive spelling.
+
+    `no-context-shift = true` and `context-shift = false` are the same
+    statement, and the two sides of this comparison never spell it the same
+    way: LlamaDeck writes the positive key into the INI (`context-shift =
+    false`, the only form llama.cpp's preset loader maps back to the option),
+    while the router spawns the child with the negative flag
+    (`--no-context-shift`, chosen by common_preset::to_args). Compared
+    literally, that one setting looks like drift twice over — once as an INI
+    key the child does not carry, once as a child flag the INI never mentions.
+
+    Only a boolean-looking value is folded: a hypothetical `no-something` that
+    takes a real value keeps its own name rather than being rewritten into a
+    key that does not exist.
+    """
+    if not key.startswith("no-"):
+        return key, value
+    lowered = value.strip().lower()
+    if lowered in _TRUE:
+        return key[3:], "false"
+    if lowered in _FALSE:
+        return key[3:], "true"
+    return key, value
+
+
+# Canonical spellings, so `--no-webui` is recognised as injected after folding.
+_INJECTED = {canon(k, "true")[0] for k in _INJECTED_RAW}
 
 
 def parse_ini(text: str) -> tuple[dict[str, str], dict[str, dict[str, str]]]:
@@ -130,8 +162,8 @@ def ini_drift(ini_text: str, models: list[dict]) -> list[dict]:
             if name not in {str(m.get("id")) for m in models}:
                 out.append({"model": name, "key": "(model)", "ini": "present", "live": "missing"})
             continue
-        live = args_to_map(args)
-        merged = {**global_, **section}
+        live = dict(canon(k, v) for k, v in args_to_map(args).items())
+        merged = dict(canon(k, v) for k, v in {**global_, **section}.items())
         for key, val in merged.items():
             if key in _INJECTED:
                 continue
@@ -144,7 +176,11 @@ def ini_drift(ini_text: str, models: list[dict]) -> list[dict]:
         # router's table, and would keep being applied to every load. Only a
         # key the INI no longer mentions *anywhere* counts, so a value moved
         # between [*] and a section is not mistaken for a deletion.
-        anywhere = set(global_) | {k for sec in sections.values() for k in sec}
+        anywhere = {
+            canon(k, v)[0]
+            for src in (global_, *sections.values())
+            for k, v in src.items()
+        }
         for key in live:
             if key in _INJECTED or key in anywhere:
                 continue
