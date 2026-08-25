@@ -29,7 +29,7 @@ Running `llama-server` directly gives you the best performance and full control 
 
 - **OS:** Linux or macOS (Apple Silicon and Intel). Windows is untested — the process handling is cross-platform, but nothing else is verified there; WSL2 is the safe path.
 - **Desktop icon:** Linux only. `scripts/install-desktop.sh` and the launcher behind it are XDG-specific — a `.desktop` entry, `xdg-open`, a Chromium binary on `PATH`, and a terminal emulator from a known list. On macOS the app itself runs (Metal builds, unified-memory budgeting and the fit-check all work); you start it with `uv run llamadeck serve` and open the URL yourself. The launcher detects a non-Linux system and says exactly that rather than failing quietly.
-- **Python:** 3.11+ (`uvx`/`pipx` handle this for you).
+- **Python:** 3.11+ and [uv](https://docs.astral.sh/uv/) — `uv sync` fetches a suitable interpreter itself, so the version your distro ships does not have to match.
 - **llama.cpp:** not required up front. The setup wizard finds a `llama-server` you already have (`PATH`, `brew install llama.cpp`, an [official release](https://github.com/ggml-org/llama.cpp/releases)), or clones and builds one for you. Building needs `git`, `cmake` and a C++ compiler — the wizard names the missing package if you don't have them.
 - **GPU:** optional — everything works CPU-only.
 
@@ -49,8 +49,10 @@ which machine you're on. Switching backends wipes the stale cmake cache for you.
 ## Quick start
 
 ```bash
-uvx llamadeck serve          # or: pipx install llamadeck && llamadeck serve
+git clone https://github.com/vectorweft/llamadeck && cd llamadeck && uv sync && uv run llamadeck serve
 ```
+
+That is the whole install: the SvelteKit build is committed, so there is no frontend step unless you change the frontend ([From source](#from-source) below). LlamaDeck is not on PyPI yet — `uvx llamadeck` will not find it.
 
 Open `http://127.0.0.1:8770`. A fresh install lands on the setup wizard, which takes a machine with nothing on it to a running model:
 
@@ -65,11 +67,13 @@ Every step re-checks the real thing rather than remembering that you clicked it,
 
 ### From source
 
+Only needed if you are changing the frontend — the built SPA under
+`backend/lld/static/` is committed, and edits to `frontend/src` do nothing until
+you regenerate it:
+
 ```bash
-git clone https://github.com/vectorweft/llamadeck && cd llamadeck
-uv sync
 (cd frontend && npm install && npm run build)   # outputs to backend/lld/static/
-uv run llamadeck serve
+uv sync --all-extras && uv run pytest backend/tests -q   # dev extras carry pytest
 ```
 
 ## A look around

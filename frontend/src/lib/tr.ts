@@ -968,4 +968,49 @@ export const tr: Record<string, string> = {
 
   // ---- CPU power telemetry ----
   'CPU watts need readable RAPL counters:': 'CPU watt ölçümü için RAPL sayaçları okunabilir olmalı:',
+
+  // ---- build page ----
+  'Build': 'Derleme',
+  'llama.cpp from source · git pull → cmake → ninja':
+    "kaynaktan llama.cpp · git pull → cmake → ninja",
+  'installed': 'kurulu',
+  'unknown build': 'bilinmeyen sürüm',
+  'update check unavailable': 'güncelleme denetimi yapılamadı',
+  'up to date with {branch}': '{branch} ile güncel',
+  '{n} new commit(s) on {branch}': '{branch} üzerinde {n} yeni commit',
+  'checking upstream…': 'upstream denetleniyor…',
+  'compute backend': 'hesaplama arka ucu',
+  'parallel jobs': 'paralel iş',
+  'all cores': 'tüm çekirdekler',
+  'current build: {backend}': 'mevcut derleme: {backend}',
+  'Rebuild': 'Yeniden derle',
+  'Building…': 'Derleniyor…',
+  'Rebuild llama.cpp?': 'llama.cpp yeniden derlensin mi?',
+  'This pulls llama.cpp and rebuilds it with {backend}. Running models keep serving from the binary already loaded in memory.':
+    "llama.cpp çekilip {backend} ile yeniden derlenir. Çalışan modeller bellekteki mevcut binary'den hizmet vermeyi sürdürür.",
+  'Building with {backend} replaces the {current} build. The stale cmake cache is wiped, so this run compiles everything from scratch.':
+    '{backend} ile derlemek {current} derlemesinin yerine geçer. Eskimiş cmake önbelleği silinir, bu yüzden bu tur her şeyi sıfırdan derler.',
+  'build': 'derleme',
+  'follow': 'takip et',
+  'no output yet': 'henüz çıktı yok',
+  'build history': 'derleme geçmişi',
+  'No builds yet.': 'Henüz derleme yok.',
+  'started': 'başladı',
+  'status': 'durum',
+  'took': 'süre',
+  'commits': "commit'ler",
+
+  // ---- logs page ----
+  'Logs': 'Kayıtlar',
+  'llama-server output, per preset': 'preset başına llama-server çıktısı',
+  'No presets yet — create one on the Presets page.':
+    'Henüz preset yok — Presets sayfasından bir tane oluşturun.',
+  'running · pid {pid} · :{port}': 'çalışıyor · pid {pid} · :{port}',
+  'stopped · last output still in memory; the full log is the file below':
+    'durdu · son çıktı bellekte; tam kayıt aşağıdaki dosyada',
+  'filter…': 'süz…',
+  'loading…': 'yükleniyor…',
+  'nothing matches the filter': 'süzgece uyan bir şey yok',
+  'this log is empty': 'bu kayıt boş',
+  '{shown} of {total} lines': '{total} satırdan {shown} tanesi',
 };

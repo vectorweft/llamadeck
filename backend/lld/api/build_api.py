@@ -32,7 +32,12 @@ async def check() -> dict:
     try:
         return await get_build_manager().check_updates()
     except BuildError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # 409, not 500: the only way this raises is a state the caller can fix —
+        # no source checkout, or a checkout git cannot read. Reporting the user's
+        # own configuration as a server fault made the Build page tell someone
+        # who simply installed a prebuilt binary that LlamaDeck had crashed.
+        # Matches POST /api/setup/build, which already answers 409 for BuildError.
+        raise HTTPException(status_code=409, detail=str(e))
 
 
 @router.get("/active")

@@ -6,9 +6,12 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# Build output
-dist/
-build/
+# Build output. Anchored (leading /) on purpose: a bare `build/` matches at
+# ANY depth, which silently swallowed frontend/src/routes/build/ — the page
+# was written, `git add` said nothing, and the shipped UI linked to a 404.
+/dist/
+/build/
+/frontend/build/
 
 # Frontend
 frontend/node_modules/
@@ -18,7 +21,9 @@ frontend/.svelte-kit/
 
 # Runtime state — machine-specific, and `state` is a symlink out of the repo
 # into ~/.config/llamadeck (settings, presets, tokens, the model DB).
-logs/
+# Anchored for the same reason as build/ above: the bare form also matched
+# frontend/src/routes/logs/.
+/logs/
 state
 *.log
 

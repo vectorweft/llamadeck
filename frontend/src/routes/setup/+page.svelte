@@ -88,6 +88,11 @@
 
   function openStream() {
     source?.close();
+    // The stream primes every new subscriber with the running job's scrollback,
+    // so a reconnect re-delivers lines this page already has. Reopening on
+    // "Clone and build" therefore printed the first few lines of the job twice.
+    // The stream is self-sufficient: drop what we hold and let it re-send.
+    log = [];
     source = new EventSource('/api/build/stream');
     source.onmessage = async (ev) => {
       try {
@@ -118,7 +123,6 @@
   async function installFromSource() {
     busy = 'build';
     error = null;
-    log = [];
     try {
       const n = jobsOverride.trim() === '' ? null : Number(jobsOverride);
       const r = await api.setupBuild(repoPath, backendId, Number.isFinite(n as number) ? (n as number) : null);
