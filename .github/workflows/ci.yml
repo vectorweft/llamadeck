@@ -31,9 +31,13 @@ jobs:
 
       - name: Install uv
         # v5 shipped a Node 20 bundle, which the runners now force onto Node 24
-        # and annotate every run about. checkout and setup-node are on v5 too
-        # but are not deprecated — left alone rather than bumped for tidiness.
-        uses: astral-sh/setup-uv@v10
+        # and annotate every run about. Pinned to an exact version rather than a
+        # floating major because setup-uv stopped publishing bare major tags
+        # after v7 — `@v10` does not resolve, and @v7 would leave us three
+        # majors back. checkout and setup-node stay on v5: they are not
+        # deprecated, and bumping a working action for tidiness risks more than
+        # the tidiness is worth.
+        uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
 
