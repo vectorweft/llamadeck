@@ -233,27 +233,42 @@ async def probe_endpoint(base: str, headers: dict | None = None,
                 data = r.json()
             except Exception:
                 continue
-            entries = (data.get("data") or []) if isinstance(data, dict) else []
-            if entries:
-                loaded_ids: list[str] = []
-                for m in entries:
-                    if not isinstance(m, dict):
-                        continue
-                    mid = m.get("id") or m.get("name")
-                    if not mid:
-                        continue
-                    mid = str(mid)
-                    info["models"].append(mid)
-                    meta = m.get("meta") or {}
-                    n_ctx = meta.get("n_ctx")
-                    if isinstance(n_ctx, int) and n_ctx > 0:
-                        info["n_ctx_by_model"][mid] = n_ctx
-                    if (m.get("status") or {}).get("value") == "loaded":
-                        loaded_ids.append(mid)
-                if len(loaded_ids) == 1:
-                    info["loaded"] = loaded_ids[0]
-                info["reachable"] = True
-                break
+            if not isinstance(data, dict):
+                continue
+            # A 200 here already proves something is listening; an endpoint
+            # that serves an empty catalogue is up, not absent. (Reporting it
+            # as unreachable is what turns "no models loaded" into "is the
+            # server running?" on the What's New settings screen.)
+            info["reachable"] = True
+            # `data[].id` is the OpenAI shape; `models[].name` is what a
+            # llama.cpp-adjacent server can answer instead. Both are accepted
+            # — dropping the second one silently blinded the probe to it.
+            entries = [
+                m for m in (data.get("data") or data.get("models") or [])
+                if isinstance(m, dict)
+            ]
+            ids: list[str] = []
+            n_ctx_by_model: dict[str, int] = {}
+            loaded_ids: list[str] = []
+            for m in entries:
+                mid = m.get("id") or m.get("name")
+                if not mid:
+                    continue
+                mid = str(mid)
+                ids.append(mid)
+                meta = m.get("meta") or {}
+                n_ctx = meta.get("n_ctx")
+                if isinstance(n_ctx, int) and n_ctx > 0:
+                    n_ctx_by_model[mid] = n_ctx
+                if (m.get("status") or {}).get("value") == "loaded":
+                    loaded_ids.append(mid)
+            if not ids:
+                continue  # nothing usable at this URL — try the next one
+            info["models"] = ids
+            info["n_ctx_by_model"] = n_ctx_by_model
+            if len(loaded_ids) == 1:
+                info["loaded"] = loaded_ids[0]
+            break
         try:
             r = await client.get(f"{root}/props")
             if r.status_code == 200:
@@ -1344,8 +1359,17 @@ Cluster related flags and commits into meaningful FEATURES and produce one card 
     async def delete_scan(self, scan_id: int) -> bool:
         """Delete a scan and everything it owns (its cards, and any A/B runs
         that reference those cards). Used to clear the pile of failed/pending
-        scans; a scan that already produced cards is dragged out whole."""
+        scans; a scan that already produced cards is dragged out whole.
+
+        False when there is no such scan, which is what the API turns into a
+        404 — returning True unconditionally made that branch unreachable and
+        every delete look like it had found something."""
         async with connect() as db:
+            row = await (await db.execute(
+                "SELECT id FROM feature_scans WHERE id=?", (scan_id,)
+            )).fetchone()
+            if row is None:
+                return False
             card_ids = [
                 row["id"]
                 for row in await (await db.execute(

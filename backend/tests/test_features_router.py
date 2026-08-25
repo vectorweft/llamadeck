@@ -182,3 +182,62 @@ async def test_delete_scans_filters_by_status():
         rem = await db.execute("SELECT status FROM feature_scans")
         statuses = [r["status"] for r in await rem.fetchall()]
     assert statuses == ["summarized"]
+
+
+@pytest.mark.asyncio
+async def test_deleting_a_scan_that_does_not_exist_says_so():
+    """The API turns False into a 404. Returning True unconditionally made
+    that branch unreachable, so deleting nothing reported success."""
+    await init_db()
+    assert await FeatureTracker().delete_scan(999_999) is False
+
+
+# ---------- probe_endpoint: what "reachable" means ----------
+
+@pytest.mark.asyncio
+async def test_an_endpoint_with_an_empty_catalogue_is_still_reachable(monkeypatch):
+    """A 200 from /models is proof something is listening. Treating an empty
+    catalogue as unreachable is what turns "no models loaded" into "nothing
+    answered — is the server running?" on the settings screen."""
+    routes = {
+        "http://local/models": _FakeResp(200, {"data": []}),
+        "http://local/props": _FakeResp(404, {}),
+    }
+    monkeypatch.setattr(features, "_probe_cache", {})
+    monkeypatch.setattr(features.httpx, "AsyncClient", _fake_client_for(routes))
+    info = await features.probe_endpoint("http://local")
+    assert info["reachable"] is True
+    assert info["models"] == []
+
+
+@pytest.mark.asyncio
+async def test_probe_endpoint_reads_the_models_name_shape(monkeypatch):
+    """Not every server answers the OpenAI `data[].id` shape; some list
+    `models[].name`. Both have to be understood or the probe reports a live
+    endpoint as serving nothing."""
+    routes = {
+        "http://local/models": _FakeResp(200, {"models": [
+            {"name": "gemma-3-27b"}, {"name": "qwen3.8-27b"},
+        ]}),
+        "http://local/props": _FakeResp(404, {}),
+    }
+    monkeypatch.setattr(features, "_probe_cache", {})
+    monkeypatch.setattr(features.httpx, "AsyncClient", _fake_client_for(routes))
+    info = await features.probe_endpoint("http://local")
+    assert info["models"] == ["gemma-3-27b", "qwen3.8-27b"]
+    assert info["reachable"] is True
+
+
+@pytest.mark.asyncio
+async def test_a_model_list_is_never_collected_twice(monkeypatch):
+    """Both candidate URLs answer here. Whichever one supplies the ids ends
+    the loop, so no id is listed twice."""
+    payload = _models_payload("only", 8192, [])
+    routes = {
+        "http://local/models": _FakeResp(200, payload),
+        "http://local/v1/models": _FakeResp(200, payload),
+        "http://local/props": _FakeResp(404, {}),
+    }
+    monkeypatch.setattr(features, "_probe_cache", {})
+    monkeypatch.setattr(features.httpx, "AsyncClient", _fake_client_for(routes))
+    assert (await features.probe_endpoint("http://local"))["models"] == ["only"]
