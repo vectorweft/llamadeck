@@ -11,8 +11,6 @@ from __future__ import annotations
 import os
 import struct
 
-import pytest
-
 from lld import prewarm
 from lld.prewarm import ALL_CPU_MOE
 
