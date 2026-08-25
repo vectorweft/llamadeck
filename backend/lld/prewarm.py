@@ -38,7 +38,6 @@ from .gguf_header import (
     _u32,
     _u64,
 )
-from .model_defaults import _read_gguf_cached
 from .vram_estimate import split_shards
 
 log = logging.getLogger(__name__)
@@ -182,16 +181,6 @@ def _uses_no_mmap(args: list[str]) -> bool:
     return False
 
 
-def _block_count(model_path: str) -> int:
-    """Number of layers the model declares (0 when the header is unreadable)."""
-    try:
-        meta = _read_gguf_cached(Path(model_path))
-    except Exception:  # noqa: BLE001 - never fail a warm over metadata
-        return 0
-    arch = meta.get("general.architecture", "")
-    return int(meta.get(f"{arch}.block_count") or 0)
-
-
 def prewarm_model(model_path: str, n_cpu_moe: int) -> dict:
     """Warm the CPU-offloaded expert tensors of `model_path`.
 
@@ -221,10 +210,11 @@ def prewarm_from_args(args: list[str]) -> dict:
     if _uses_no_mmap(args):
         return {"n_cpu_moe": 0, "ranges": 0, "bytes": 0, "skipped": "no-mmap"}
     model_path = _model_path_from_args(args)
-    n_cpu_moe = cpu_moe_from_args(args)
-    if n_cpu_moe == ALL_CPU_MOE:
-        n_cpu_moe = _block_count(model_path) if model_path else 0
-    return prewarm_model(model_path or "", n_cpu_moe)
+    # ALL_CPU_MOE is passed through rather than resolved to a layer count:
+    # cpu_expert_ranges() reads it as "every block", and going via the GGUF
+    # header first meant an unreadable header turned --cpu-moe into "warm
+    # nothing" instead of "warm everything".
+    return prewarm_model(model_path or "", cpu_moe_from_args(args))
 
 
 def prewarm_from_config(config: dict) -> dict:
@@ -235,13 +225,6 @@ def prewarm_from_config(config: dict) -> dict:
     flags = config.get("extra_flags") or []
     if _uses_no_mmap(flags):
         return {"n_cpu_moe": 0, "ranges": 0, "bytes": 0, "skipped": "no-mmap"}
-    n = 0
-    for i, tok in enumerate(flags):
-        if tok in ("--cpu-moe", "-cmoe"):
-            n = _block_count(model_path)
-        elif tok in ("--n-cpu-moe", "-ncmoe") and i + 1 < len(flags):
-            try:
-                n = max(n, int(flags[i + 1]))
-            except ValueError:
-                pass
-    return prewarm_model(model_path, min(n, _block_count(model_path)) or 0)
+    # Same parse as the router path — the preset keeps --n-cpu-moe in
+    # extra_flags, so there is one spelling to understand, not two.
+    return prewarm_model(model_path, cpu_moe_from_args(flags))

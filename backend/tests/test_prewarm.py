@@ -219,3 +219,39 @@ def test_prewarm_from_args_uses_spawn_argv(tmp_path):
     stats = prewarm.prewarm_from_args(args)
     assert stats["ranges"] == 3
     assert stats["bytes"] > 0
+
+
+def test_cpu_moe_all_warms_every_block_without_reading_the_header(tmp_path):
+    """--cpu-moe means "every layer". Resolving that to a layer count via the
+    GGUF header first meant an unreadable header quietly turned "warm
+    everything" into "warm nothing" — cpu_expert_ranges already understands
+    the sentinel."""
+    p = tmp_path / "m.gguf"
+    write_gguf(p, [("general.architecture", _STR, "deepseek4")], _moe_tensors())
+    stats = prewarm.prewarm_from_args(["--model", str(p), "--cpu-moe"])
+    assert stats["ranges"] == 4
+    assert stats["bytes"] > 0
+
+
+# ---- prewarm_from_config ----------------------------------------------------
+
+def test_prewarm_from_config_reads_n_cpu_moe_out_of_extra_flags(tmp_path):
+    """Single mode warms from the preset dict; --n-cpu-moe lives in
+    extra_flags there, not in a field of its own."""
+    p = tmp_path / "m.gguf"
+    write_gguf(p, [("general.architecture", _STR, "deepseek4")], _moe_tensors())
+    stats = prewarm.prewarm_from_config({
+        "model_path": str(p), "extra_flags": ["--n-cpu-moe", "2"],
+    })
+    assert stats["ranges"] == 3
+    assert stats["bytes"] > 0
+
+
+def test_prewarm_from_config_skips_a_no_mmap_server(tmp_path):
+    p = tmp_path / "m.gguf"
+    write_gguf(p, [("general.architecture", _STR, "deepseek4")], _moe_tensors())
+    stats = prewarm.prewarm_from_config({
+        "model_path": str(p), "extra_flags": ["--n-cpu-moe", "2", "--no-mmap"],
+    })
+    assert stats["skipped"] == "no-mmap"
+    assert stats["bytes"] == 0

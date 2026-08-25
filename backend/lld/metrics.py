@@ -222,6 +222,10 @@ class MetricsService:
         # fired. Router children get a fresh port on every reload, so a reload
         # warms again; single-mode keys on the pid so a restart does too.
         self._prewarmed: set[tuple[str, str, int]] = set()
+        # asyncio only holds a weak reference to a running task, so a warm
+        # fired and forgotten can be collected mid-flight. Hold it until it
+        # finishes.
+        self._prewarm_tasks: set[asyncio.Task] = set()
 
     def state(self, preset: str) -> PresetMetricsState:
         if preset not in self.states:
@@ -598,9 +602,12 @@ class MetricsService:
                 log.exception("prewarm failed for %s %s", kind, model_id)
 
         try:
-            asyncio.get_running_loop().create_task(asyncio.to_thread(_work))
+            task = asyncio.get_running_loop().create_task(asyncio.to_thread(_work))
         except RuntimeError:
-            _work()
+            _work()  # no loop (tests, sync callers): warm inline
+        else:
+            self._prewarm_tasks.add(task)
+            task.add_done_callback(self._prewarm_tasks.discard)
 
     # --- subscriptions ---
 
