@@ -77,6 +77,11 @@ class ProcessHandle:
         # crash left router-8085 zombie for 3.5h with no recovery).
         self._autorestart_attempts_window: list[float] = []
         self._autorestart_task: asyncio.Task | None = None
+        # Set by stop(): this exit was asked for, so nothing may bring the
+        # process back. Without it a Stop looked exactly like a crash — SIGTERM
+        # gives a non-zero rc — and the auto-restart put the preset back 30s
+        # later, which read as the app refusing to stay stopped.
+        self._stop_requested = False
 
     # --- public state ---
 
@@ -297,6 +302,7 @@ class ProcessHandle:
     async def start(self) -> None:
         if self.is_running():
             raise SupervisorError(f"{self.preset_name}: already running")
+        self._stop_requested = False
         if _port_in_use(self.cfg.host, self.cfg.port):
             raise SupervisorError(port_conflict_message(self.preset_name, self.cfg.port))
         missing = self._missing_paths()
@@ -378,6 +384,14 @@ class ProcessHandle:
         return {**os.environ, **overrides}
 
     async def stop(self, timeout: float = 10.0) -> None:
+        # Before the signal, not after: the exit watcher races this call and
+        # reads the flag the moment the process goes away.
+        self._stop_requested = True
+        if self._autorestart_task and not self._autorestart_task.done():
+            # A restart already queued from an earlier crash outlives the
+            # process it was queued for; cancelling is the only way a Stop
+            # during the cooldown sticks.
+            self._autorestart_task.cancel()
         if self._adopted and self._pid is not None:
             await terminate_pid(self._pid, timeout=timeout)
             self._reset()
@@ -542,6 +556,9 @@ class ProcessHandle:
             self._schedule_autorestart()
 
     def _schedule_autorestart(self) -> None:
+        if self._stop_requested:
+            log.info("[%s] exit was requested — not auto-restarting", self.preset_name)
+            return
         # Window-based cap: at most 3 restarts per 5 minutes.
         now = time.time()
         self._autorestart_attempts_window = [
@@ -577,6 +594,8 @@ class ProcessHandle:
             await asyncio.sleep(cooldown_s)
             if self.is_running():
                 return  # someone else already started it
+            if self._stop_requested:
+                return  # stopped while we waited out the cooldown
             # Reset transient state so start() preflight checks pass cleanly.
             self._proc = None
             self._pid = None
