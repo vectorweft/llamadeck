@@ -160,27 +160,40 @@
     <div class="rounded border border-rose-900 bg-rose-950/30 px-4 py-3 text-sm text-rose-200 font-mono">{error}</div>
   {/if}
 
-  <!-- VRAM panel -->
+  <!-- VRAM panel. One bar per offload GPU: this rendered gpus[0] alone, so a
+       second card was simply absent from the page — and on a two-card box the
+       one it dropped is as likely to be the one filling up. -->
   {#if vram && offloadGpus(vram.gpus).length > 0}
-    {@const gpu = offloadGpus(vram.gpus)[0]}
-    {@const usedPct = (gpu.used_mb / gpu.total_mb) * 100}
-    {@const estPct = (activeTotalMb / gpu.total_mb) * 100}
-    <section class="rounded-lg border border-slate-800 bg-slate-900/40 p-5">
-      <div class="flex items-baseline justify-between mb-2">
-        <h2 class="text-sm uppercase tracking-wider text-slate-400">VRAM · {gpu.name}</h2>
-        <span class="text-xs font-mono text-slate-400">
-          {(gpu.used_mb / 1024).toFixed(1)} GB used · {(gpu.free_mb / 1024).toFixed(1)} GB free · {(gpu.total_mb / 1024).toFixed(1)} GB total
-        </span>
-      </div>
-      <div class="relative h-6 w-full rounded bg-slate-800 overflow-hidden">
-        <div class="absolute inset-y-0 left-0 bg-emerald-600/70" style="width: {usedPct}%"></div>
-        {#if estPct > 0}
-          <div class="absolute inset-y-0 border-l-2 border-amber-400" style="left: {Math.min(estPct, 99.5)}%" title={t('Active preset estimate: {mb} MB', { mb: activeTotalMb })}></div>
-        {/if}
-      </div>
+    {@const gpus = offloadGpus(vram.gpus)}
+    <section class="rounded-lg border border-slate-800 bg-slate-900/40 p-5 space-y-4">
+      {#each gpus as gpu (gpu.vendor + ':' + gpu.index)}
+        {@const usedPct = gpu.total_mb > 0 ? (gpu.used_mb / gpu.total_mb) * 100 : 0}
+        <!-- The estimate is a machine-wide sum over running presets, with no
+             per-device split behind it. Drawing it on one card of several would
+             claim an attribution nobody computed, so the marker is for the
+             single-GPU case and the number below stands on its own otherwise. -->
+        {@const estPct = gpus.length === 1 && gpu.total_mb > 0 ? (activeTotalMb / gpu.total_mb) * 100 : 0}
+        <div>
+          <div class="flex items-baseline justify-between mb-2 gap-3 flex-wrap">
+            <h2 class="text-sm uppercase tracking-wider text-slate-400">VRAM · {gpu.name}</h2>
+            <span class="text-xs font-mono text-slate-400">
+              {(gpu.used_mb / 1024).toFixed(1)} GB used · {(gpu.free_mb / 1024).toFixed(1)} GB free · {(gpu.total_mb / 1024).toFixed(1)} GB total
+            </span>
+          </div>
+          <div class="relative h-6 w-full rounded bg-slate-800 overflow-hidden">
+            <div class="absolute inset-y-0 left-0 bg-emerald-600/70" style="width: {usedPct}%"></div>
+            {#if estPct > 0}
+              <div class="absolute inset-y-0 border-l-2 border-amber-400" style="left: {Math.min(estPct, 99.5)}%" title={t('Active preset estimate: {mb} MB', { mb: activeTotalMb })}></div>
+            {/if}
+          </div>
+        </div>
+      {/each}
       {#if activeTotalMb > 0}
-        <div class="text-xs text-slate-500 mt-1 font-mono">
+        <div class="text-xs text-slate-500 font-mono">
           {t('active preset estimate:')} {activeTotalMb} MB ({(activeTotalMb / 1024).toFixed(1)} GB)
+          {#if gpus.length > 1}
+            <span class="text-slate-600">· {t('across all GPUs')}</span>
+          {/if}
         </div>
       {/if}
     </section>

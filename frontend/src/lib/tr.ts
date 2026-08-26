@@ -330,6 +330,7 @@ export const tr: Record<string, string> = {
   '{a} / {b} active': '{a} / {b} aktif',
   'Active preset estimate: {mb} MB': 'Aktif preset tahmini: {mb} MB',
   'active preset estimate:': 'aktif preset tahmini:',
+  'across all GPUs': "tüm GPU'lar genelinde",
   'External llama-server found': 'Harici llama-server bulundu',
   '(no model)': '(model yok)',
   '(no preset matches port {port})': '({port} portuna uyan preset yok)',
