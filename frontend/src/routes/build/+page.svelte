@@ -30,6 +30,7 @@
   let log = $state<string[]>([]);
   let error = $state<string | null>(null);
   let checkError = $state<string | null>(null);
+  let checking = $state(false);
   let busy = $state(false);
 
   let backendId = $state('auto');
@@ -70,11 +71,14 @@
    * its own and reports its own failure — an offline box still gets the rest of
    * the page instead of one long spinner. */
   async function refreshCheck() {
+    checking = true;
     try {
       check = await api.buildCheck();
       checkError = null;
     } catch (e) {
       checkError = e instanceof Error ? e.message : String(e);
+    } finally {
+      checking = false;
     }
   }
 
@@ -179,6 +183,16 @@
       {:else}
         <span class="font-mono text-sm text-slate-500">…</span>
       {/if}
+      <!-- The check runs once on mount and can fail on its own (offline box,
+           slow fetch). Without a way to run it again the only retry was a page
+           reload, which also throws away the log stream. -->
+      <button
+        onclick={refreshCheck}
+        disabled={checking}
+        class="ml-auto rounded border border-slate-700 px-2 py-1 text-xs hover:bg-slate-800 disabled:opacity-50"
+      >
+        {checking ? t('checking upstream…') : t('Check for updates')}
+      </button>
     </div>
 
     {#if checkError}

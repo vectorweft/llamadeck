@@ -11,6 +11,7 @@ raises BuildError.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 import re
@@ -29,6 +30,11 @@ from .procutil import run_capture
 from .settings import LOGS_DIR, ensure_state_dirs, load_settings, save_settings
 
 log = logging.getLogger(__name__)
+
+#: Seconds a single-branch `git fetch` gets before the update check gives up.
+#: Generous on purpose: this is one HTTP request the Build page waits on, and
+#: a slow link finishing in 90s is a working check, not a hung one.
+FETCH_TIMEOUT = 120.0
 
 #: `llama-server --version` prints its banner on stderr, and the shape of that
 #: banner changed upstream. Both are still in the wild:
@@ -258,16 +264,32 @@ class BuildManager:
         branch = await self.default_branch()
         try:
             fetch = await asyncio.create_subprocess_exec(
-                "git", "-C", str(self.llama_repo), "fetch", "--quiet",
+                # One branch, no tags. A bare `git fetch` also drags in every new
+                # tag, and llama.cpp tags every CI build — 7k of them and dozens
+                # more a day. That is the bulk of the transfer, none of it is
+                # used here, and on a checkout a few days stale it pushed the
+                # fetch past the timeout below: the check then reported "timed
+                # out" on a machine whose network was fine, and left killed-mid-
+                # download tmp_pack files behind in .git/objects/pack.
+                "git", "-C", str(self.llama_repo), "fetch", "--quiet", "--no-tags",
+                "origin", f"+refs/heads/{branch}:refs/remotes/origin/{branch}",
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
             )
         except FileNotFoundError:
             raise BuildError("git not found on PATH — install git to use the Build page")
         try:
-            _, err = await asyncio.wait_for(fetch.communicate(), timeout=60.0)
+            _, err = await asyncio.wait_for(fetch.communicate(), timeout=FETCH_TIMEOUT)
         except asyncio.TimeoutError:
-            fetch.kill()
-            raise BuildError("git fetch timed out")
+            with contextlib.suppress(ProcessLookupError):
+                fetch.kill()
+            # Reap it. Without the wait the transport child outlives the request
+            # and a retry races the corpse for the same pack lock.
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(fetch.wait(), timeout=5.0)
+            raise BuildError(
+                f"git fetch timed out after {FETCH_TIMEOUT:.0f}s — check the network, "
+                f"or run `git -C {self.llama_repo} fetch` once by hand to catch up."
+            )
         if fetch.returncode != 0:
             raise BuildError(f"git fetch failed: {err.decode(errors='replace').strip()}")
 
