@@ -22,7 +22,9 @@ from .settings import LlamaServerConfig
 from .vram_estimate import (
     estimate_vram,
     missing_shards,
+    override_cpu_mb,
     parse_cpu_moe_offload,
+    parse_tensor_overrides,
     read_model_profile,
     rival_split_prefix,
     split_shards,
@@ -70,6 +72,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "core_too_big": "Doesn't fit: even with experts in RAM, the core part (~{fixed} GB) exceeds the GPU",
         "core_too_big_hint": "Try lowering the context length (ctx_size) and switching the KV cache to q8_0; if it still doesn't fit, a smaller model version is needed.",
         "too_big_ram": "Doesn't fit: the model exceeds VRAM + RAM combined (~{cpu} GB needed in RAM, total RAM {total} GB)",
+        "gpu_ok_ram_tight": "The card is fine (~{gpu} GB of {free} GB free) — host RAM is the constraint: {ram} GB has to live there.",
         "too_big_hint": "This version is too big for this machine. Download a smaller / more compressed GGUF.",
         "moe_desc": "MoE with {n} experts",
         "moe_desc_active": ", {m} active per request",
@@ -103,6 +106,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "core_too_big": "Sığmıyor: uzmanlar RAM'e taşınsa bile çekirdek kısım (~{fixed} GB) ekran kartını aşıyor",
         "core_too_big_hint": "Bağlam uzunluğunu (ctx_size) düşürmeyi ve KV cache'i q8_0 yapmayı deneyin; yine sığmazsa daha küçük bir model sürümü gerekir.",
         "too_big_ram": "Sığmıyor: model VRAM + RAM toplamını aşıyor (RAM'e ~{cpu} GB gerekir, toplam RAM {total} GB)",
+        "gpu_ok_ram_tight": "Ekran kartı yeterli (boş {free} GB'ın ~{gpu} GB'ı) — darboğaz RAM: {ram} GB orada durmak zorunda.",
         "too_big_hint": "Bu sürüm bu makine için çok büyük. Daha küçük/daha çok sıkıştırılmış bir GGUF indirin.",
         "moe_desc": "{n} uzmanlı MoE",
         "moe_desc_active": ", istek başına {m} aktif",
@@ -197,6 +201,10 @@ def check_fit(
 
     # --- GPU/RAM split of the current config -------------------------------
     cpu_moe_layers = parse_cpu_moe_offload(cfg, n_exp_layers) if is_moe else 0
+    # Weights a -ot rule sends to host RAM. --n-cpu-moe only ever matches
+    # ffn_*_exps, so a model whose bulk sits in some other tensor (Flash-Next
+    # keeps 26.8 GiB in per_layer_token_embd) is judged unfittable without it.
+    ot_cpu_mb = override_cpu_mb(cfg.model_path, parse_tensor_overrides(cfg), cpu_moe_layers)
     ngl = cfg.n_gpu_layers
 
     # No GPU telemetry (gpu_total_mb == 0): a CPU-only box, or an Apple
@@ -208,8 +216,8 @@ def check_fit(
     if no_gpu or ngl == 0:
         gpu_need_mb = 0
         ram_need_mb = model_mb + kv_mb + compute_mb
-    elif cpu_moe_layers > 0:
-        cpu_w = int(cpu_moe_layers * per_layer_mb)
+    elif cpu_moe_layers > 0 or ot_cpu_mb:
+        cpu_w = int(cpu_moe_layers * per_layer_mb) + ot_cpu_mb
         gpu_need_mb = (model_mb - cpu_w) + kv_mb + compute_mb
         ram_need_mb = cpu_w
     elif n_layers and 0 < ngl < n_layers:
@@ -299,6 +307,15 @@ def check_fit(
             })
         else:
             headline = S["fits"].format(need=_gb(gpu_need_mb), free=_gb(gpu_free_mb))
+    elif fits_now and hybrid:
+        # The card has room; only the host-RAM share is tight. Saying "doesn't
+        # fit on the GPU" here sends the user off to shrink ctx or offload
+        # more, both of which make the RAM side worse. The ram_warn/ram_err
+        # message appended above already names the real remedy.
+        level = "needs_offload" if ram_ok_total else "too_big"
+        headline = S["gpu_ok_ram_tight"].format(
+            gpu=_gb(gpu_need_mb), free=_gb(gpu_free_mb), ram=_gb(ram_need_mb)
+        )
     elif fits_alone and (not hybrid or ram_ok):
         level = "fits_if_alone"
         headline = S["fits_if_alone"].format(need=_gb(gpu_need_mb), free=_gb(gpu_free_mb))
@@ -328,7 +345,7 @@ def check_fit(
 
         if is_moe:
             # Everything except the experts should stay on the GPU (for speed).
-            fixed_mb = (model_mb - exps_mb) + kv_mb + compute_mb
+            fixed_mb = (model_mb - exps_mb - ot_cpu_mb) + kv_mb + compute_mb
             expert_budget = gpu_budget_mb - headroom_mb - fixed_mb
             gpu_exp_layers = max(0, int(expert_budget // per_layer_mb)) if per_layer_mb else 0
             gpu_exp_layers = min(gpu_exp_layers, n_exp_layers)
@@ -428,6 +445,10 @@ def check_fit(
             "gpu_need_mb": int(gpu_need_mb),
             "ram_need_mb": int(ram_need_mb),
             "cpu_moe_layers": cpu_moe_layers,
+            # Weights a -ot rule sends to host RAM. The slider has to know:
+            # its "fixed on GPU" figure is model_mb - exps_mb, which still
+            # counts overridden tensors the GPU never sees.
+            "override_cpu_mb": int(ot_cpu_mb),
             # Already applied to gpu_need_mb; exposed so the client-side offload
             # slider predicts the same numbers this panel shows.
             "calibration_mb": calibration_mb,

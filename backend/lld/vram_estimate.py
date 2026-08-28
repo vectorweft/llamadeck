@@ -577,6 +577,13 @@ def estimate_vram(cfg: LlamaServerConfig) -> VramEstimate | None:
         ram_mb = int(model_mb * (n_layers_meta - ngl) / n_layers_meta)
     else:
         ram_mb = 0
+    # -ot can park tensors --n-cpu-moe cannot touch. Qwen3.8-Flash-Next is the
+    # case that forced this: its per_layer_token_embd is 26.8 of the 32 GiB
+    # that --n-cpu-moe leaves behind, so without this the estimate says a
+    # working single-5090 preset needs ~32 GB of VRAM.
+    ram_mb += override_cpu_mb(
+        model_path, parse_tensor_overrides(cfg), cpu_moe_layers
+    )
     ram_mb = min(ram_mb, model_mb)
     gpu_mb = total_mb - ram_mb
     # Correction learned from what the card actually reported for this model
@@ -615,3 +622,108 @@ def estimate_vram(cfg: LlamaServerConfig) -> VramEstimate | None:
         gpu_mb=gpu_mb,
         ram_mb=ram_mb,
     )
+
+
+# ---- Tensor overrides (-ot / --override-tensor) ---------------------------
+# llama.cpp routes a tensor by the FIRST override whose regex *searches* its
+# name (common/arg.cpp), so order matters and the match is partial, not
+# anchored. A value of "CPU" parks it in host RAM; anything else (CUDA0,
+# Vulkan2, ...) is still a GPU buffer and must not be subtracted here.
+_OT_FLAGS = ("--override-tensor", "-ot")
+
+
+def parse_tensor_overrides(cfg: LlamaServerConfig) -> list[tuple[str, str]]:
+    """[(regex, buffer type)] from every -ot on the command line, in order.
+
+    Repeated -ot flags append (parse_tensor_buffer_overrides), and one flag may
+    carry several comma-separated rules — both spellings are flattened here."""
+    flags = getattr(cfg, "extra_flags", None) or []
+    out: list[tuple[str, str]] = []
+    i = 0
+    while i < len(flags):
+        if flags[i] in _OT_FLAGS and i + 1 < len(flags):
+            for rule in flags[i + 1].split(","):
+                pattern, sep, buft = rule.rpartition("=")
+                if sep and pattern:
+                    out.append((pattern, buft.strip()))
+            i += 2
+            continue
+        i += 1
+    return out
+
+
+# (shard mtimes, rules) -> (bytes matched per expert layer, bytes matched elsewhere)
+_OT_CACHE: dict[tuple, tuple[dict[int, int], int]] = {}
+_OT_CACHE_MAX = 16
+
+
+def _override_split(
+    model_path: str, overrides: list[tuple[str, str]]
+) -> tuple[dict[int, int], int]:
+    """Bytes each -ot rule sends to CPU, split expert-layer vs everything else.
+
+    Both halves come from one walk of the tensor index because the two callers
+    want different slices of it: the live estimate skips expert layers already
+    parked by --n-cpu-moe, while the fit panel's "even with all experts on CPU"
+    hypothetical must count none of them."""
+    rules = [(p, b) for p, b in overrides if b.upper() == "CPU"]
+    if not rules or not model_path:
+        return {}, 0
+    try:
+        compiled = [re.compile(p) for p, _ in rules]
+    except re.error as e:
+        log.warning("vram-estimate: bad -ot regex, ignoring overrides: %s", e)
+        return {}, 0
+
+    shards = split_shards(model_path)
+    try:
+        key = (tuple((p, os.stat(p).st_mtime_ns) for p in shards), tuple(rules))
+    except OSError:
+        return {}, 0
+    hit = _OT_CACHE.get(key)
+    if hit is not None:
+        return hit
+
+    per_layer: dict[int, int] = {}
+    other = 0
+    try:
+        for shard in shards:
+            for name, nb in read_tensor_index(shard):
+                if not any(rx.search(name) for rx in compiled):
+                    continue
+                m = _EXPS_RE.match(name)
+                if m:
+                    layer = int(m.group(1))
+                    per_layer[layer] = per_layer.get(layer, 0) + nb
+                else:
+                    other += nb
+    except Exception as e:
+        log.warning("vram-estimate: could not read tensor index for -ot: %s", e)
+        return {}, 0
+
+    if len(_OT_CACHE) >= _OT_CACHE_MAX:
+        _OT_CACHE.pop(next(iter(_OT_CACHE)))
+    _OT_CACHE[key] = (per_layer, other)
+    return per_layer, other
+
+
+def override_cpu_mb(
+    model_path: str,
+    overrides: list[tuple[str, str]],
+    cpu_moe_layers: int = 0,
+) -> int:
+    """MB of weights that -ot parks in host RAM, over and above --n-cpu-moe.
+
+    Expert layers below `cpu_moe_layers` are skipped so the two flags cannot
+    double-count the same bytes: llama.cpp implements --n-cpu-moe as tensor
+    overrides on the first N expert layers, and a user -ot that also matches
+    them adds nothing new. Pass the model's full expert-layer count to get the
+    non-expert bytes alone.
+
+    Returns 0 when there are no CPU-bound overrides, so the tensor index is
+    only walked for the presets that actually use the flag."""
+    per_layer, other = _override_split(model_path, overrides)
+    total = other + sum(
+        nb for layer, nb in per_layer.items() if layer >= cpu_moe_layers
+    )
+    return total // (1024 * 1024)

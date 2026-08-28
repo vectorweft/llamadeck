@@ -22,9 +22,13 @@
       ? {
           nLayers: fit.model.n_exp_layers,
           perLayerMb: fit.model.exps_mb / fit.model.n_exp_layers,
-          // Everything that stays on the GPU no matter how the experts are split.
+          // Everything that stays on the GPU no matter how the experts are
+          // split. -ot rules come off it: --n-cpu-moe cannot touch a tensor
+          // like per_layer_token_embd, so without this the slider shows a
+          // model as unfittable at every position while it loads fine.
           fixedMb:
-            fit.estimate.model_mb - fit.model.exps_mb +
+            fit.estimate.model_mb - fit.model.exps_mb -
+            (fit.plan?.override_cpu_mb ?? 0) +
             fit.estimate.kv_cache_mb + fit.estimate.compute_mb,
         }
       : null
@@ -52,7 +56,8 @@
   const headroomMb = $derived(fit?.plan?.headroom_mb ?? 2048);
   const gpuMb = (n: number) =>
     moe ? Math.max(0, moe.fixedMb + (moe.nLayers - n) * moe.perLayerMb - calib) : 0;
-  const ramMb = (n: number) => (moe ? n * moe.perLayerMb : 0);
+  const ramMb = (n: number) =>
+    moe ? n * moe.perLayerMb + (fit?.plan?.override_cpu_mb ?? 0) : 0;
 
   const gpuFree = $derived(fit?.hardware?.gpu_free_mb ?? 0);
   const ramFree = $derived(fit?.hardware?.ram_available_mb ?? 0);

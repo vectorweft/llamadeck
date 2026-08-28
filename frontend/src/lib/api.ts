@@ -775,6 +775,8 @@ export interface FitCheck {
   hardware?: { gpu_total_mb: number; gpu_free_mb: number; ram_total_mb: number; ram_available_mb: number };
   plan?: {
     gpu_need_mb: number; ram_need_mb: number; cpu_moe_layers: number;
+    /** Weights a -ot rule parks in host RAM; not covered by cpu_moe_layers. */
+    override_cpu_mb?: number;
     calibration_mb?: number;
     /** Safety margin the verdict used — smaller once the model has been measured. */
     headroom_mb?: number;
