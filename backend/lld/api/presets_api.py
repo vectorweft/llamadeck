@@ -276,17 +276,34 @@ async def _reject_aliased_devices(binary: str, wanted: list[str]) -> None:
     """
     if len(wanted) < 2:
         return
-    picked = {d.id: d for d in await probe_devices(binary) if d.id in wanted}
+    devices = await probe_devices(binary)
+    picked = {d.id: d for d in devices if d.id in wanted}
     for dev in picked.values():
         twin = dev.duplicate_of
         if twin and twin in picked:
+            # Whoever asked for two ids wanted two cards, and "pick one" alone
+            # leaves them with half a plan — usually because a card changed
+            # slot and renumbered the Vulkan ids behind it, so the pin that
+            # used to mean the Radeon now means the 5090 a second time. Name
+            # what is actually left to offload to.
+            rest = [
+                d for d in devices
+                if d.selectable and d.id not in (dev.id, twin)
+            ]
+            hint = ""
+            if rest:
+                spelled = ", ".join(f"{d.id} ({d.name})" for d in rest)
+                hint = (
+                    f" The other card{'s' if len(rest) > 1 else ''} this build "
+                    f"can offload to: {spelled}."
+                )
             raise HTTPException(
                 status_code=400,
                 detail=(
                     f"{dev.id} and {twin} are the same physical card "
                     f"({dev.name}) seen through two backends. Selecting both "
                     f"would budget its memory twice — pick one (prefer "
-                    f"{twin}, the vendor-native backend)."
+                    f"{twin}, the vendor-native backend).{hint}"
                 ),
             )
 

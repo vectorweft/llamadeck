@@ -55,6 +55,42 @@ def test_one_card_seen_by_two_backends_collapses_onto_the_native_one():
     assert devs["Vulkan2"].selectable is False
 
 
+def test_two_identical_cards_in_one_backend_are_two_cards():
+    """Same name, same backend, two rows — llama.cpp enumerates each backend
+    once, so this is a pair of 5090s and not one card seen twice. Folding them
+    by name cost the second card: greyed out in the picker, and pinning both
+    rejected as double-booking."""
+    text = """Available devices:
+  CUDA0: NVIDIA GeForce RTX 5090 (32149 MiB, 31626 MiB free)
+  CUDA1: NVIDIA GeForce RTX 5090 (32149 MiB, 31626 MiB free)
+  Vulkan0: NVIDIA GeForce RTX 5090 (32607 MiB, 31626 MiB free)
+  Vulkan1: NVIDIA GeForce RTX 5090 (32607 MiB, 31626 MiB free)
+"""
+    devs = _by_id(parse_list_devices(text, CPU_NAME))
+    assert devs["CUDA0"].duplicate_of is None
+    assert devs["CUDA1"].duplicate_of is None
+    # The Vulkan aliases pair off by position rather than both folding onto
+    # CUDA0 — otherwise CUDA1 looks like a card no Vulkan row belongs to.
+    assert devs["Vulkan0"].duplicate_of == "CUDA0"
+    assert devs["Vulkan1"].duplicate_of == "CUDA1"
+    assert [d.id for d in selectable_devices(list(devs.values()))] == ["CUDA0", "CUDA1"]
+
+
+def test_a_card_one_backend_cannot_see_stays_selectable():
+    """CUDA_VISIBLE_DEVICES hides the second 5090 from CUDA but not from
+    Vulkan. The surplus Vulkan row is a real card with no alias, and losing it
+    would be worse than the double-booking the pairing guards against."""
+    text = """Available devices:
+  CUDA0: NVIDIA GeForce RTX 5090 (32149 MiB, 31626 MiB free)
+  Vulkan0: NVIDIA GeForce RTX 5090 (32607 MiB, 31626 MiB free)
+  Vulkan1: NVIDIA GeForce RTX 5090 (32607 MiB, 31626 MiB free)
+"""
+    devs = _by_id(parse_list_devices(text, CPU_NAME))
+    assert devs["Vulkan0"].duplicate_of == "CUDA0"
+    assert devs["Vulkan1"].duplicate_of is None
+    assert [d.id for d in selectable_devices(list(devs.values()))] == ["CUDA0", "Vulkan1"]
+
+
 def test_integrated_gpu_is_flagged_by_its_cpu_name():
     """RADV names a desktop Ryzen's iGPU after the CPU, which is the only
     thing separating it from a discrete card in this output."""

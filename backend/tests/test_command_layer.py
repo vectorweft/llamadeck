@@ -461,6 +461,8 @@ async def test_pinning_one_card_under_two_backends_is_rejected():
                         free_mb=32000, backend="CUDA"),
             LlamaDevice(id="Vulkan2", name="NVIDIA GeForce RTX 5090", total_mb=32000,
                         free_mb=32000, backend="Vulkan", duplicate_of="CUDA0"),
+            LlamaDevice(id="Vulkan3", name="AMD Radeon AI PRO R9700 (RADV GFX1201)",
+                        total_mb=32624, free_mb=32000, backend="Vulkan"),
         ]
 
     presets_api.probe_devices = fake_probe
@@ -469,6 +471,9 @@ async def test_pinning_one_card_under_two_backends_is_rejected():
             await presets_api._reject_aliased_devices("llama-server", ["CUDA0", "Vulkan2"])
         assert e.value.status_code == 400
         assert "same physical card" in e.value.detail
+        # Whoever picked two ids wanted two cards: the message has to name the
+        # one that is actually free, or "pick one" ends the two-GPU layout.
+        assert "Vulkan3" in e.value.detail and "R9700" in e.value.detail
         # One id, or two genuinely different cards, stay allowed.
         await presets_api._reject_aliased_devices("llama-server", ["CUDA0"])
     finally:

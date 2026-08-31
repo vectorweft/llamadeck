@@ -87,6 +87,16 @@
   /** Whether the current selection is "keep it all in RAM". */
   const cpuPinned = $derived((editing?.devices ?? []).includes(CPU_DEVICE));
 
+  /** Pinned rows the device list no longer offers — a duplicate backend alias
+   * above all. Moving a card between slots renumbers the Vulkan ids behind it,
+   * so a preset saved as CUDA0+Vulkan1 can come back meaning the same 5090
+   * twice; the save is then rejected. Such a row keeps its checkbox enabled
+   * while it is ticked, because a disabled one cannot be un-ticked and the
+   * preset could never be repaired. */
+  const stalePicks = $derived(
+    devices.filter(d => (editing?.devices ?? []).includes(d.id) && !d.selectable),
+  );
+
   function newPreset() {
     editorTab = 'basics';
     nameIsAuto = false;
@@ -1075,8 +1085,8 @@
               <div class="mt-1 space-y-1">
                 {#each devices as d (d.id)}
                   {@const picked = (editing.devices ?? []).includes(d.id)}
-                  <label class="flex items-center gap-2 rounded border px-2 py-1.5 font-mono text-xs {d.selectable ? 'border-slate-700 bg-slate-800/50 cursor-pointer' : 'border-slate-800 bg-slate-900/40 opacity-60 cursor-not-allowed'}">
-                    <input type="checkbox" checked={picked} disabled={!d.selectable}
+                  <label class="flex items-center gap-2 rounded border px-2 py-1.5 font-mono text-xs {d.selectable ? 'border-slate-700 bg-slate-800/50 cursor-pointer' : picked ? 'border-amber-600/60 bg-slate-900/40 cursor-pointer' : 'border-slate-800 bg-slate-900/40 opacity-60 cursor-not-allowed'}">
+                    <input type="checkbox" checked={picked} disabled={!d.selectable && !picked}
                       onchange={() => toggleDevice(d.id)} class="accent-sky-500" />
                     <span class="w-20 shrink-0 text-slate-200">{d.label ?? d.id}</span>
                     <span class="flex-1 truncate text-slate-400" title={d.name}>{d.name}</span>
@@ -1102,6 +1112,11 @@
                   -dev {(editing.devices ?? []).join(',')}
                 {/if}
               </div>
+              {#if stalePicks.length > 0}
+                <div class="mt-1 rounded border border-amber-600/50 bg-amber-950/20 px-2 py-2 text-xs text-amber-200/90">
+                  {t('This preset is pinned to {ids}, which this binary cannot offload to as picked — untick it. Device ids are positions in a backend\u2019s own list, so moving a card between slots renumbers them: a pin saved when Vulkan1 was the second card can come back meaning a different one.', { ids: stalePicks.map(d => d.id).join(', ') })}
+                </div>
+              {/if}
               {#if cpuPinned}
                 <div class="mt-1 text-xs text-slate-400">
                   {t('Nothing is offloaded: the whole model and its KV cache stay in system RAM, and n_gpu_layers is held at 0. Speed comes from CPU cores and memory bandwidth — the right choice for a small model while the cards are busy.')}

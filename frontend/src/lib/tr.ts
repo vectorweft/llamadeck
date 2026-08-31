@@ -138,6 +138,8 @@ export const tr: Record<string, string> = {
   'Could not read the device list from the llama-server binary — llama.cpp will choose.':
     'llama-server ikilisinden cihaz listesi okunamadı — seçimi llama.cpp yapacak.',
   'same card as {id}': '{id} ile aynı kart',
+  'This preset is pinned to {ids}, which this binary cannot offload to as picked — untick it. Device ids are positions in a backend’s own list, so moving a card between slots renumbers them: a pin saved when Vulkan1 was the second card can come back meaning a different one.':
+    'Bu ayar {ids} cihazına pinli; bu ikili seçildiği haliyle oraya yükleme yapamaz — işareti kaldırın. Cihaz kimlikleri bir arka ucun kendi listesindeki sıralardır; kartı başka yuvaya takmak onları yeniden numaralandırır: Vulkan1 ikinci kartken kaydedilen bir pin, artık başka bir kartı gösteriyor olabilir.',
   'may be {id}': '{id} olabilir',
 
   // ---- RPC offload sunuculari (ayarlar) ----

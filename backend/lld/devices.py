@@ -170,21 +170,35 @@ def parse_list_devices(text: str, cpu_name: str = "") -> list[LlamaDevice]:
         devices.append(dev)
 
     # Collapse aliases of one physical GPU onto the best-ranked backend.
-    best: dict[str, LlamaDevice] = {}
+    #
+    # Only rows from *different* backends can be aliases: llama.cpp enumerates
+    # each backend's devices once, so two CUDA rows are two cards even when
+    # they carry the same name. Folding them by name alone cost a box with a
+    # pair of identical 5090s its second card — CUDA1 marked a duplicate of
+    # CUDA0, greyed out in the picker, and pinning both rejected as
+    # double-booking one card.
+    #
+    # When a name appears several times in two backends they are paired by
+    # position rather than all folded onto the first row: with two 5090s,
+    # CUDA0 is Vulkan0's alias and CUDA1 is Vulkan1's, both backends
+    # enumerating in the same (PCI) order. A backend that sees fewer of them —
+    # one card hidden behind CUDA_VISIBLE_DEVICES — leaves the surplus rows
+    # unpaired and selectable, because hiding a real card is the worse error.
+    by_name: dict[str, dict[str, list[LlamaDevice]]] = {}
     for dev in devices:
         if dev.software:
             continue
-        key = _normalized_name(dev.name)
-        incumbent = best.get(key)
-        rank = _BACKEND_RANK.get(dev.backend, 7)
-        if incumbent is None or rank < _BACKEND_RANK.get(incumbent.backend, 7):
-            best[key] = dev
-    for dev in devices:
-        if dev.software:
-            continue
-        winner = best.get(_normalized_name(dev.name))
-        if winner is not None and winner.id != dev.id:
-            dev.duplicate_of = winner.id
+        backends = by_name.setdefault(_normalized_name(dev.name), {})
+        backends.setdefault(dev.backend, []).append(dev)
+    for backends in by_name.values():
+        ranked = sorted(
+            backends.items(),
+            key=lambda kv: (_BACKEND_RANK.get(kv[0], 7), kv[0]),
+        )
+        winners = ranked[0][1]
+        for _, rows in ranked[1:]:
+            for winner, dev in zip(winners, rows):
+                dev.duplicate_of = winner.id
 
     # A card that is full can report no card at all. Under memory pressure
     # cudaMemGetInfo fails and llama.cpp prints "(0 MiB, 0 MiB free)" — seen
