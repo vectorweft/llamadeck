@@ -84,7 +84,7 @@ _extra_cache: tuple[int, frozenset[str]] | None = None
 
 
 def _extra_hosts() -> frozenset[str]:
-    """Host names the user has legitimised: the bind hosts and `allowed_hosts`.
+    """Host names the user has legitimised: the bind host and `allowed_hosts`.
 
     Read straight from settings.json rather than through `load_settings()`:
     this runs on the request path, and `load_settings()` writes a default file
@@ -107,10 +107,9 @@ def _extra_hosts() -> frozenset[str]:
     except (OSError, ValueError):
         data = {}
     if isinstance(data, dict):
-        for key in ("controller_bind_host", "mcp_bind_host"):
-            value = data.get(key)
-            if isinstance(value, str) and value.strip():
-                names.add(hostname_of(value))
+        bind_host = data.get("controller_bind_host")
+        if isinstance(bind_host, str) and bind_host.strip():
+            names.add(hostname_of(bind_host))
         listed = data.get("allowed_hosts")
         if isinstance(listed, list):
             for value in listed:

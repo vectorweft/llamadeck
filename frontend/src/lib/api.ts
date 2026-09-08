@@ -7,8 +7,6 @@ export interface Health {
 export interface Settings {
   controller_bind_host: string;
   controller_bind_port: number;
-  mcp_bind_host: string;
-  mcp_bind_port: number;
   /** Extra host NAMES the backend answers to. IPs and localhost always pass. */
   allowed_hosts?: string[];
   llama_repo: string;

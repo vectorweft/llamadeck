@@ -244,8 +244,6 @@ class GatewaySettings(BaseModel):
 class Settings(BaseModel):
     controller_bind_host: str = "127.0.0.1"
     controller_bind_port: int = 8770
-    mcp_bind_host: str = "127.0.0.1"
-    mcp_bind_port: int = 8765
 
     # Extra host names LlamaDeck will answer to, beyond IP literals and
     # localhost. Empty is right for almost everyone: the guard in net_guard.py

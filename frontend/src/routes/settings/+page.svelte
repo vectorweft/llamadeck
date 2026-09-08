@@ -83,9 +83,7 @@
     const old = JSON.parse(saved) as Settings;
     return (
       old.controller_bind_host !== s.controller_bind_host ||
-      old.controller_bind_port !== s.controller_bind_port ||
-      old.mcp_bind_host !== s.mcp_bind_host ||
-      old.mcp_bind_port !== s.mcp_bind_port
+      old.controller_bind_port !== s.controller_bind_port
     );
   });
 
@@ -499,14 +497,6 @@
         <label class="block">
           <span class="text-sm text-slate-400">controller_bind_port</span>
           <input type="number" bind:value={s.controller_bind_port} class="mt-1 w-full rounded bg-slate-800 border border-slate-700 px-2 py-1.5 font-mono text-xs" />
-        </label>
-        <label class="block">
-          <span class="text-sm text-slate-400">mcp_bind_host</span>
-          <input bind:value={s.mcp_bind_host} spellcheck="false" class="mt-1 w-full rounded bg-slate-800 border border-slate-700 px-2 py-1.5 font-mono text-xs" />
-        </label>
-        <label class="block">
-          <span class="text-sm text-slate-400">mcp_bind_port</span>
-          <input type="number" bind:value={s.mcp_bind_port} class="mt-1 w-full rounded bg-slate-800 border border-slate-700 px-2 py-1.5 font-mono text-xs" />
         </label>
         <label class="block col-span-2">
           <span class="text-sm text-slate-400">allowed_hosts</span>
