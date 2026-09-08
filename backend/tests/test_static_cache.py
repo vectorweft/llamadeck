@@ -71,3 +71,43 @@ async def test_unknown_api_path_is_json_not_the_shell(built_ui):
     resp = await _get(app, "/api/does-not-exist")
     assert resp.status_code == 404
     assert resp.headers["content-type"].startswith("application/json")
+
+
+# --- the SPA fallback is not a file server ----------------------------------
+
+@pytest.mark.asyncio
+async def test_a_traversal_does_not_escape_the_build_directory(built_ui, tmp_path):
+    """`full_path` is whatever the client sent: uvicorn does not decode it and
+    starlette does not normalise it, so "%2e%2e/%2e%2e/secret" arrives here as
+    "../../secret". The old code joined that onto STATIC_DIR and served
+    anything `is_file()` said yes to — every file the backend user can read.
+
+    The percent-encoded form is the one that matters: httpx (like a browser)
+    collapses a literal "/../" before it ever leaves the client, so only
+    "%2e%2e" arrives intact. The plain spellings are here to say so — if a
+    future client or proxy stops normalising them, this test already covers it.
+
+    The answer is the SPA shell (200), not a 404: an unknown *page* path is
+    exactly what client-side routing is for, and the point is that no file
+    outside the build directory is ever the response body.
+    """
+    secret = tmp_path / "secret.txt"
+    secret.write_text("SUPER-SECRET")
+
+    app = main_mod.create_app()
+    for path in ("/../secret.txt", "/%2e%2e/secret.txt",
+                 "/../../etc/hostname", "/x/../../secret.txt"):
+        resp = await _get(app, path)
+        assert "SUPER-SECRET" not in resp.text, path
+        assert resp.status_code == 200, path
+        assert resp.headers["cache-control"] == "no-cache", path
+
+
+@pytest.mark.asyncio
+async def test_a_real_extra_file_is_still_served(built_ui):
+    """The traversal check must not cost the unhashed extras their route —
+    favicon and friends are served from here, not from the /_app mount."""
+    app = main_mod.create_app()
+    resp = await _get(app, "/favicon.png")
+    assert resp.status_code == 200
+    assert resp.content == b"\x89PNG"

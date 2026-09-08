@@ -562,8 +562,14 @@ def create_app() -> FastAPI:
                     status_code=404,
                     content={"detail": f"unknown API path: /{full_path} (is the service running old code?)"},
                 )
-            target = STATIC_DIR / full_path
-            if target.is_file():
+            # `full_path` is whatever the client sent, undecoded by uvicorn and
+            # unnormalised by starlette: "%2e%2e/%2e%2e/etc/passwd" arrives here
+            # as "../../etc/passwd". Resolve first and serve only what actually
+            # lands inside the build directory — otherwise this returns any file
+            # the backend user can read.
+            static_root = STATIC_DIR.resolve()
+            target = (STATIC_DIR / full_path).resolve()
+            if target.is_relative_to(static_root) and target.is_file():
                 # Unhashed extras (favicon, manifest…) — revalidate rather than
                 # pin, they are replaced in place by a rebuild.
                 return FileResponse(target, headers={"cache-control": NO_CACHE})
