@@ -246,7 +246,14 @@ class Settings(BaseModel):
     controller_bind_port: int = 8770
     mcp_bind_host: str = "127.0.0.1"
     mcp_bind_port: int = 8765
-    lan_token: str | None = None
+
+    # Extra host names LlamaDeck will answer to, beyond IP literals and
+    # localhost. Empty is right for almost everyone: the guard in net_guard.py
+    # accepts any IP address, so loopback and LAN access by address already
+    # work. This is for the person who reaches it as http://workstation:8770 —
+    # a name has to be listed here because a *forged* name in the Host header
+    # is exactly what a DNS-rebinding attack sends. Names only, no port.
+    allowed_hosts: list[str] = Field(default_factory=list)
 
     llama_repo: str = Field(default_factory=lambda: str(Path.home() / "llama.cpp"))
     llama_bin: str = Field(default_factory=lambda: _default_llama_bin())

@@ -509,14 +509,15 @@
           <input type="number" bind:value={s.mcp_bind_port} class="mt-1 w-full rounded bg-slate-800 border border-slate-700 px-2 py-1.5 font-mono text-xs" />
         </label>
         <label class="block col-span-2">
-          <span class="text-sm text-slate-400">lan_token</span>
+          <span class="text-sm text-slate-400">allowed_hosts</span>
           <input
-            value={s.lan_token ?? ''}
-            oninput={(e) => { if (s) s.lan_token = (e.currentTarget as HTMLInputElement).value || null; }}
+            value={(s.allowed_hosts ?? []).join(', ')}
+            oninput={(e) => { if (s) s.allowed_hosts = (e.currentTarget as HTMLInputElement).value.split(',').map((h) => h.trim()).filter(Boolean); }}
             spellcheck="false"
+            placeholder="workstation, nas.lan"
             class="mt-1 w-full rounded bg-slate-800 border border-slate-700 px-2 py-1.5 font-mono text-xs"
           />
-          <span class="mt-1 block text-[11px] text-slate-600">{t('required header token when binding beyond localhost')}</span>
+          <span class="mt-1 block text-[11px] text-slate-600">{t('extra host NAMES this backend will answer to; IP addresses and localhost always work')}</span>
         </label>
       </div>
       {#if needsRestart}

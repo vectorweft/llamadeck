@@ -118,7 +118,12 @@ LlamaDeck itself listens on `127.0.0.1:8770` and never binds `:8080` — your `l
 
 ## Security
 
-LlamaDeck binds to localhost by default and has no authentication. It can start and stop processes on your machine — do not expose it to untrusted networks. LAN access can be gated with `lan_token` in settings.
+LlamaDeck binds to localhost by default and has no authentication. It can start and stop processes on your machine — do not expose it to untrusted networks.
+
+Because it has no authentication, LlamaDeck checks two headers on every request, which is what keeps "localhost only" from being a fiction:
+
+- **`Host`** must be an IP address, `localhost`, or a name you listed in the `allowed_hosts` setting. This blocks DNS rebinding — a web page that re-resolves its own domain to `127.0.0.1` to reach the API in your browser's name. Reaching LlamaDeck by address (loopback or LAN) is unaffected; reaching it by hostname needs one line in Settings → Network.
+- **`Origin`**, on `POST`/`PUT`/`PATCH`/`DELETE`, must be a page LlamaDeck served itself. A cross-origin form submission is delivered no matter what CORS says, and most mutating endpoints here take no body, so delivery alone would be the whole attack.
 
 The `llama-server` processes LlamaDeck starts also bind `127.0.0.1` by default, since they serve completions with no auth of their own. To reach a model from another machine, set that preset's *host* to `0.0.0.0` deliberately — and put it behind something that authenticates.
 

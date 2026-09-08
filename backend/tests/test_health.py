@@ -9,7 +9,7 @@ from lld.main import create_app
 @pytest.mark.asyncio
 async def test_health_ok():
     app = create_app()
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://127.0.0.1") as client:
         resp = await client.get("/health")
         assert resp.status_code == 200
         body = resp.json()
@@ -28,7 +28,7 @@ async def test_settings_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setattr(settings_mod, "LOGS_DIR", state / "logs")
 
     app = create_app()
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://127.0.0.1") as client:
         resp = await client.get("/api/settings")
         assert resp.status_code == 200
         data = resp.json()

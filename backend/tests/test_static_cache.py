@@ -30,7 +30,7 @@ def built_ui(tmp_path, monkeypatch):
 
 
 async def _get(app, path: str):
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://127.0.0.1") as c:
         return await c.get(path)
 
 

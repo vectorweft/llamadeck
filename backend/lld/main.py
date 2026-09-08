@@ -36,6 +36,7 @@ from .gpu_broker import init_broker
 from .hf import get_downloader
 from .mcp_server import build_http_app, build_mcp
 from .metrics import get_metrics_service
+from .net_guard import HostOriginGuard
 from .power import power_loop
 from .models import full_rescan
 from .presets import PresetRegistry, default_seeds  # noqa: F401
@@ -575,6 +576,12 @@ def create_app() -> FastAPI:
                 "ui": "not-built",
                 "hint": "Run `cd frontend && npm install && npm run build` to build the UI",
             }
+
+    # Added last on purpose: Starlette builds the stack in reverse, so the
+    # last middleware registered is the outermost one. The Host/Origin check
+    # has to run before anything else — the routers, the /mcp mount and the
+    # static SPA all sit behind it. See net_guard.py for what it stops.
+    app.add_middleware(HostOriginGuard)
 
     return app
 

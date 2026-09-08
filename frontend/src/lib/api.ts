@@ -9,7 +9,8 @@ export interface Settings {
   controller_bind_port: number;
   mcp_bind_host: string;
   mcp_bind_port: number;
-  lan_token: string | null;
+  /** Extra host NAMES the backend answers to. IPs and localhost always pass. */
+  allowed_hosts?: string[];
   llama_repo: string;
   llama_bin: string;
   llama_server_url: string;

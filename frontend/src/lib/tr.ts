@@ -813,8 +813,8 @@ export const tr: Record<string, string> = {
   Network: 'Ağ',
   'LlamaDeck has no authentication — keep it on localhost unless your network is trusted.':
     'LlamaDeck kimlik doğrulaması içermez — ağınıza güvenmiyorsanız localhost’ta bırakın.',
-  'required header token when binding beyond localhost':
-    'localhost dışına bağlanırken gereken başlık token’ı',
+  'extra host NAMES this backend will answer to; IP addresses and localhost always work':
+    'bu backend’in yanıt vereceği ek host ADLARI; IP adresleri ve localhost her zaman çalışır',
   'Bind host/port changes take effect after a backend restart (Dashboard → Restart backend).':
     'Bind host/port değişiklikleri backend yeniden başlatılınca etkinleşir (Panel → Yeniden başlat).',
   'unsaved changes': 'kaydedilmemiş değişiklikler',
