@@ -20,7 +20,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import AsyncIterator
 
 log = logging.getLogger("lld.hf")
@@ -142,6 +142,23 @@ def derive_base_model(repo_id: str, filename: str) -> str:
     return re.sub(r"[-_]GGUF$", "", repo_name, flags=re.I)
 
 
+class UnsafePathError(ValueError):
+    """A repo-supplied name would place the download outside the models root."""
+
+
+def _safe_segment(seg: str) -> str:
+    """One path segment, or raise. `brand`/`series`/`base_model` arrive straight
+    from the API body, so a segment that is `..` (or carries a separator, or is
+    absolute) would walk the download out of the models root — and the write
+    that follows is a plain file write, so it lands wherever it points.
+    """
+    if seg in (".", ".."):
+        raise UnsafePathError(f"path segment may not be {seg!r}")
+    if "/" in seg or "\\" in seg or "\x00" in seg:
+        raise UnsafePathError(f"path segment may not contain a separator: {seg!r}")
+    return seg
+
+
 def target_segments(brand: str, series: str, base_model: str) -> list[str]:
     """The <brand>/<series>/<base_model> path segments, with a segment dropped
     when it only repeats its parent.
@@ -150,16 +167,50 @@ def target_segments(brand: str, series: str, base_model: str) -> list[str]:
     (owner, repo-name-without-GGUF) and derive_base_model() strips the quant
     suffix down to that same repo name — which used to nest
     unsloth/LFM2.5-1.2B-Thinking/LFM2.5-1.2B-Thinking. One level is enough.
+
+    Raises UnsafePathError on a segment that would escape the models root.
     """
     segs: list[str] = []
     for seg in (brand, series, base_model):
         seg = (seg or "").strip("/ ")
         if not seg:
             continue
+        seg = _safe_segment(seg)
         if segs and segs[-1].casefold() == seg.casefold():
             continue
         segs.append(seg)
     return segs
+
+
+def safe_relative_filename(filename: str) -> str:
+    """`filename` as a repo-relative path, or raise.
+
+    huggingface_hub joins this onto local_dir and creates the parents, and its
+    only `..` guard is Windows-gated (`_local_folder.py`), so on Linux nothing
+    upstream stops a traversal. Checked here instead.
+    """
+    name = (filename or "").strip()
+    if not name:
+        raise UnsafePathError("filename is empty")
+    if name.startswith("/") or name.startswith("\\") or "\x00" in name:
+        raise UnsafePathError(f"filename must be repo-relative: {filename!r}")
+    if PureWindowsPath(name).is_absolute() or PurePosixPath(name).is_absolute():
+        raise UnsafePathError(f"filename must be repo-relative: {filename!r}")
+    parts = re.split(r"[\\/]+", name)
+    if any(p in ("..", ".") for p in parts):
+        raise UnsafePathError(f"filename may not contain '..': {filename!r}")
+    return name
+
+
+def assert_within(root: Path, target: Path) -> Path:
+    """`target` resolved, guaranteed to sit under `root`. The belt to the
+    per-segment braces above: one check that holds however the parts were built.
+    """
+    root_r = root.expanduser().resolve()
+    target_r = target.expanduser().resolve()
+    if root_r != target_r and not target_r.is_relative_to(root_r):
+        raise UnsafePathError(f"{target_r} is outside {root_r}")
+    return target_r
 
 
 # ---------------------------------------------------------------------------
@@ -387,7 +438,13 @@ class HFDownloader:
         if base_model is None:
             base_model = derive_base_model(repo_id, filename)
 
-        target_dir = str(self.models_root.joinpath(*target_segments(brand, series, base_model)))
+        # Every part of the destination is caller-supplied. Validate the pieces,
+        # then re-check the assembled path — the download that follows writes
+        # bytes to exactly this location.
+        filename = safe_relative_filename(filename)
+        segments = target_segments(brand, series, base_model)
+        target_dir = str(assert_within(self.models_root, self.models_root.joinpath(*segments)))
+        assert_within(self.models_root, Path(target_dir) / filename)
 
         # Dedupe: if an active job exists for the same file, return it (a repeat
         # click must not open a new download); resume a paused/failed job in place.
@@ -622,7 +679,11 @@ class HFDownloader:
         # event per chunk (~10 s lag on slow links). 1 MB is smooth and free.
         huggingface_hub.constants.DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 
-        target = Path(job.target_dir)
+        # Re-checked here rather than trusted from enqueue(): jobs are persisted
+        # and replayed on boot, so a row written before this guard existed (or by
+        # hand) must not be resumed into a path outside the models root.
+        target = assert_within(self.models_root, Path(job.target_dir))
+        assert_within(self.models_root, target / safe_relative_filename(job.filename))
 
         # Migration guard: if this job wasn't previously run over HTTP (old xet
         # era), .incomplete may not be a sequential prefix — Range-resume would

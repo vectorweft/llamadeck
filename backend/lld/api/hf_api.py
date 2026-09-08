@@ -3,11 +3,11 @@ from __future__ import annotations
 import asyncio
 import json
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from ..hf import classify, derive_base_model, get_downloader
+from ..hf import UnsafePathError, classify, derive_base_model, get_downloader
 
 router = APIRouter(prefix="/api/hf", tags=["hf"])
 
@@ -79,14 +79,17 @@ async def list_files(repo_id: str = Query(...)):
 @router.post("/download")
 async def start_download(req: DownloadRequest):
     dl = get_downloader()
-    job = dl.enqueue(
-        repo_id=req.repo_id,
-        filename=req.filename,
-        brand=req.brand,
-        series=req.series,
-        base_model=req.base_model,
-        revision=req.revision,
-    )
+    try:
+        job = dl.enqueue(
+            repo_id=req.repo_id,
+            filename=req.filename,
+            brand=req.brand,
+            series=req.series,
+            base_model=req.base_model,
+            revision=req.revision,
+        )
+    except UnsafePathError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return job.to_dict()
 
 
