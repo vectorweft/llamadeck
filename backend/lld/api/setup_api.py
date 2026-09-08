@@ -23,7 +23,7 @@ from pydantic import BaseModel
 from .. import accel, models
 from ..build import LLAMA_CPP_URL, BuildError, get_build_manager
 from ..presets import PresetRegistry
-from ..procutil import run_capture
+from ..procutil import llama_bin_rejection, run_capture
 from ..settings import factory_models_root, load_settings, save_settings
 
 log = logging.getLogger(__name__)
@@ -211,6 +211,11 @@ async def use_binary(body: UseBinaryBody) -> dict:
         raise HTTPException(status_code=400, detail=f"no file at {body.path}")
     if not os.access(path, os.X_OK):
         raise HTTPException(status_code=400, detail=f"{path} is not executable")
+    # Before the probe, not after: _probe_version RUNS this path, so a shell
+    # named here would be executed by the very check meant to vet it.
+    rejection = llama_bin_rejection(str(path))
+    if rejection:
+        raise HTTPException(status_code=400, detail=rejection)
     # Uncached: this is an explicit user action, and a chmod +x since the last
     # probe does not change mtime — the cache would keep answering "no".
     version = await _probe_version(path)

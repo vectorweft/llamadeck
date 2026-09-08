@@ -23,7 +23,7 @@ from .flag_catalog import flags_missing_values, get_flag_catalog
 from .rpc_server import RpcServerError, get_rpc_manager, needs_rpc_for
 from .exit_diagnosis import diagnose_exit
 from .presets import PresetError, PresetRegistry
-from .procutil import terminate_pid
+from .procutil import llama_bin_rejection, terminate_pid
 from .router_ini import router_env
 from .settings import LOGS_DIR, LlamaServerConfig
 from .vram_estimate import estimate_vram
@@ -198,7 +198,15 @@ class ProcessHandle:
         then treats as a crash worth retrying — three restarts, three identical
         failures, and a "manual restart needed" verdict for something no restart
         fixes. These are cheap to check and name the field to fix.
+
+        The binary is checked here too, and this is the copy that matters:
+        `PUT /api/settings` refuses a shell at the door, but settings.json is a
+        plain file the user (or anything running as them) can edit directly.
+        Whatever route it took, nothing gets exec'd until it passes here.
         """
+        rejection = llama_bin_rejection(self.binary)
+        if rejection:
+            return rejection
         if self.cfg.mode == "router":
             md = self.cfg.models_dir
             if md and not Path(md).is_dir():

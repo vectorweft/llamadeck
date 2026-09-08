@@ -14,6 +14,7 @@ import logging
 import os
 import signal
 import subprocess
+from pathlib import Path
 from typing import NamedTuple, Sequence
 
 import psutil
@@ -181,3 +182,80 @@ async def _wait_gone(pid: int, timeout: float) -> bool:
             return True
         await asyncio.sleep(0.1)
     return not psutil.pid_exists(pid)
+
+
+# --- what may be spawned as "the llama-server binary" ------------------------
+#
+# `to_argv` forces every preset's program to the configured `llama_bin` and
+# drops whatever the raw command box names (argv.py:command_argv), and spawning
+# goes through create_subprocess_exec — no shell. That makes `llama_bin` the one
+# lever that decides *what* runs; `argv_override` only decides the flags. So the
+# published exploit chain — PUT /api/settings sets llama_bin=/bin/sh, then a
+# preset's raw command becomes `-c '<anything>'` — hinges entirely on this one
+# string, and checking it is the cheapest place to break the chain.
+#
+# Be honest about what this is: a speed bump, not a boundary. LlamaDeck runs as
+# the user and exists to launch processes, so anything that can reach the API
+# can also edit settings.json directly. What it buys is that the documented
+# chain fails closed, at the sink as well as the door, and that a shell in this
+# field is a named error instead of a baffling one.
+#
+# What it deliberately does NOT do is run the candidate to see what it is.
+# `--version` probing is self-defeating as a security check: the probe executes
+# the attacker's chosen binary, which is the thing being prevented. Every check
+# below is metadata only.
+
+#: Programs whose entire job is to turn arguments into more code. A wrapper
+#: script is not in here and never will be — that is a path like
+#: ~/bin/llama-wrapper.sh with a shebang, which execs perfectly well.
+_INTERPRETERS = frozenset({
+    "sh", "bash", "zsh", "dash", "ash", "ksh", "csh", "tcsh", "fish", "busybox",
+    "env", "perl", "ruby", "node", "php", "lua", "awk", "gawk", "tclsh",
+    "xargs", "sudo", "doas", "nohup", "setsid", "stdbuf", "timeout", "strace",
+})
+
+
+def _program_stem(p: Path) -> str:
+    name = p.name.lower()
+    return name[:-4] if name.endswith(".exe") else name
+
+
+def _is_interpreter(stem: str) -> bool:
+    # python, python3, python3.13 — all one thing.
+    return stem in _INTERPRETERS or stem.startswith("python")
+
+
+def llama_bin_rejection(path: str | None) -> str | None:
+    """Why `path` must not be used as the llama-server binary, or None.
+
+    An empty value and a path that simply is not there both return None: a
+    fresh install has no binary yet and the setup wizard has to be reachable
+    without one. This rejects what is present and wrong, plus interpreters
+    whether or not they exist.
+    """
+    if not path or not path.strip():
+        return None
+    p = Path(os.path.expanduser(path.strip()))
+
+    # Follow the link before judging the name: /usr/local/bin/llama-server can
+    # be a symlink to /bin/bash, and only the target says so. resolve() touches
+    # no content and spawns nothing.
+    try:
+        resolved = p.resolve()
+    except (OSError, RuntimeError):
+        resolved = p
+    if _is_interpreter(_program_stem(p)) or _is_interpreter(_program_stem(resolved)):
+        return (
+            f"{p} is a shell or interpreter, not llama-server. Running it would "
+            "turn a preset's arguments into arbitrary commands, so LlamaDeck "
+            "refuses it. Point this at the llama-server executable "
+            "(…/build/bin/llama-server), or at your own wrapper script."
+        )
+
+    if p.is_dir():
+        return f"{p} is a directory, not the llama-server binary"
+    if p.exists() and not p.is_file():
+        return f"{p} is not a regular file"
+    if p.is_file() and not os.access(p, os.X_OK):
+        return f"{p} is not executable — chmod +x it, or point at the real binary"
+    return None

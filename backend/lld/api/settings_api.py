@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
+from ..procutil import llama_bin_rejection
 from ..settings import Settings, load_settings, save_settings
+
+log = logging.getLogger("lld")
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -17,7 +21,21 @@ async def get_settings() -> Settings:
 
 @router.put("")
 async def put_settings(s: Settings) -> Settings:
+    # `llama_bin` decides what every preset executes — the raw command box only
+    # supplies its arguments (argv.py:command_argv forces the program). The
+    # setup wizard's /use-binary has always vetted its candidate; this endpoint
+    # took anything, which is the asymmetry the audit walked through. Check the
+    # same way the wizard does, minus the version probe (see procutil).
+    rejection = llama_bin_rejection(s.llama_bin)
+    if rejection:
+        raise HTTPException(status_code=400, detail=rejection)
+
+    previous = load_settings()
     save_settings(s)
+    # Never silent: this one field is the pivot in every local-privilege story
+    # about LlamaDeck, so a change to it leaves a line behind.
+    if previous.llama_bin != s.llama_bin:
+        log.warning("llama_bin changed: %s -> %s", previous.llama_bin, s.llama_bin)
     return s
 
 
