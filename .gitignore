@@ -30,6 +30,12 @@ state
 # Local scratch
 prompt.txt
 .claude/
+# Working notes, drafts and generated reports — written *about* the project
+# rather than being part of it. A security audit written at the repo root is
+# one `git add -A` away from being published, and this repo is public.
+# Anchored and a directory, not a glob: `*.md` would eat README.md and docs/,
+# which is exactly how build/ and logs/ went wrong above.
+/notes/
 
 # OS
 .DS_Store
