@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { marked } from 'marked';
+  import DOMPurify from 'dompurify';
   import {
     api,
     type FeatureAbRun,
@@ -42,8 +43,18 @@
   const guideStale = $derived(
     guide?.status === 'success' && version?.commit && guide.commit_sha && guide.commit_sha !== version.commit
   );
+  // The guide is Markdown an LLM wrote from llama.cpp's own --help text and
+  // commit log — strings LlamaDeck did not author and cannot vouch for. marked
+  // passes embedded HTML through verbatim by design, and this lands in {@html},
+  // so a `<img onerror=…>` that survived the model would run with the app's
+  // origin: same-origin access to every unauthenticated endpoint here,
+  // llama_bin included. Sanitize between the two. The page is client-only
+  // (ssr=false), so DOMPurify always has a real DOM to work with.
   const guideHtml = $derived(
-    guide?.status === 'success' && guide.content_md ? (marked.parse(guide.content_md) as string) : ''
+    guide?.status === 'success' && guide.content_md
+      ? DOMPurify.sanitize(marked.parse(guide.content_md, { async: false }) as string,
+                           { USE_PROFILES: { html: true } })
+      : ''
   );
 
   async function startGuide() {
